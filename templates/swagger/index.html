@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SaaS Platform API Documentation</title>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/png" href="/static/drf-yasg/swagger-ui-dist/favicon-32x32.png" sizes="32x32" />
+    <link rel="icon" type="image/png" href="/static/drf-yasg/swagger-ui-dist/favicon-16x16.png" sizes="16x16" />
+    <link rel="stylesheet" type="text/css" href="/static/drf-yasg/swagger-ui-dist/swagger-ui.css" />
+    <style>
+        /* Custom styles to hide navigation bar and improve appearance */
+        .swagger-ui .topbar {
+            display: none !important;
+        }
+        
+        .swagger-ui .info {
+            margin: 20px 0;
+        }
+        
+        .swagger-ui .scheme-container {
+            margin: 20px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        
+        .swagger-ui .opblock-tag-section {
+            margin: 20px 0;
+        }
+        
+        .swagger-ui .opblock {
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        
+        /* Custom header */
+        .custom-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .custom-header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+        
+        .custom-header p {
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+        
+        /* Hide unnecessary elements */
+        .swagger-ui .link {
+            display: none !important;
+        }
+        
+        .swagger-ui .authorization__btn {
+            display: none !important;
+        }
+        
+        /* Improve readability */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        .swagger-ui .info .title {
+            font-size: 2.5em;
+            color: #333;
+        }
+        
+        .swagger-ui .info .description {
+            font-size: 1.1em;
+            line-height: 1.6;
+        }
+        
+        /* JWT Token input styling */
+        .jwt-token-input {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            border: 1px solid #dee2e6;
+        }
+        
+        .jwt-token-input input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        
+        .jwt-token-input label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #495057;
+        }
+    </style>
+</head>
+<body>
+    <div class="custom-header">
+        <h1>SaaS Platform API</h1>
+        <p>Complete API documentation with JWT authentication</p>
+    </div>
+    
+    <!-- JWT Token Input -->
+    <div class="jwt-token-input">
+        <label for="jwt-token">JWT Token (Bearer):</label>
+        <input type="text" id="jwt-token" placeholder="Enter your JWT token here (without 'Bearer ' prefix)" />
+        <small style="color: #6c757d; display: block; margin-top: 5px;">
+            Get your token from: <code>/api/auth/token/</code> endpoint
+        </small>
+    </div>
+    
+    <div id="swagger-ui"></div>
+    
+    <script src="/static/drf-yasg/swagger-ui-dist/swagger-ui-bundle.js"> </script>
+    <script src="/static/drf-yasg/swagger-ui-dist/swagger-ui-standalone-preset.js"> </script>
+    <script>
+        window.onload = function() {
+            // Build a system
+            const ui = SwaggerUIBundle({
+                url: "{{ schema_url }}",
+                dom_id: '#swagger-ui',
+                presets: [
+                    SwaggerUIBundle.presets.apis,
+                    SwaggerUIStandalonePreset
+                ],
+                plugins: [
+                    SwaggerUIBundle.plugins.DownloadUrl
+                ],
+                layout: "StandaloneLayout",
+                deepLinking: true,
+                showExtensions: true,
+                showCommonExtensions: true,
+                docExpansion: "list",
+                filter: true,
+                tryItOutEnabled: true,
+                requestInterceptor: function(request) {
+                    // Add JWT token to requests if available
+                    const token = document.getElementById('jwt-token').value;
+                    if (token && request.headers) {
+                        request.headers['Authorization'] = 'Bearer ' + token;
+                    }
+                    return request;
+                },
+                responseInterceptor: function(response) {
+                    // Handle responses if needed
+                    return response;
+                }
+            });
+            
+            window.ui = ui;
+            
+            // Auto-fill JWT token from localStorage if available
+            const savedToken = localStorage.getItem('jwt_token');
+            if (savedToken) {
+                document.getElementById('jwt-token').value = savedToken;
+            }
+            
+            // Save token to localStorage when changed
+            document.getElementById('jwt-token').addEventListener('input', function() {
+                localStorage.setItem('jwt_token', this.value);
+            });
+        };
+    </script>
+</body>
+</html> 
