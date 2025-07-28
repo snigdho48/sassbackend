@@ -90,25 +90,33 @@ class WaterAnalysis(models.Model):
     def calculate_indices(self):
         """Calculate LSI, RSI, and LS indices."""
         try:
+            # Convert Decimal fields to float for calculations
+            ph = float(self.ph)
+            tds = float(self.tds)
+            total_alkalinity = float(self.total_alkalinity)
+            hardness = float(self.hardness)
+            chloride = float(self.chloride)
+            temperature = float(self.temperature)
+            
             # Langelier Saturation Index (LSI)
             # LSI = pH - pHs
             # pHs = (9.3 + A + B) - (C + D)
             # Where A, B, C, D are temperature and TDS dependent factors
             
             # Simplified LSI calculation
-            temp_factor = 0.1 * (self.temperature - 25)
-            tds_factor = 0.01 * (self.tds - 150)
+            temp_factor = 0.1 * (temperature - 25)
+            tds_factor = 0.01 * (tds - 150)
             phs = 9.3 + temp_factor + tds_factor
-            self.lsi = self.ph - phs
+            self.lsi = ph - phs
             
             # Ryznar Stability Index (RSI)
             # RSI = 2 * pHs - pH
-            self.rsi = 2 * phs - self.ph
+            self.rsi = 2 * phs - ph
             
             # Larson-Skold Index (LS)
             # LS = (Cl + SO4) / (HCO3)
             # Simplified version using available parameters
-            self.ls = self.chloride / self.total_alkalinity if self.total_alkalinity > 0 else 0
+            self.ls = chloride / total_alkalinity if total_alkalinity > 0 else 0
             
             # Determine status
             self.lsi_status = self._get_lsi_status()

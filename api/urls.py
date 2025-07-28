@@ -42,6 +42,7 @@ urlpatterns = [
     path('water-trends/', views.water_trends_view, name='water_trends'),
     path('water-recommendations/', views.water_recommendations_view, name='water_recommendations'),
     path('calculate-water-analysis/', views.calculate_water_analysis_view, name='calculate_water_analysis'),
+    path('calculate-water-analysis-with-recommendations/', views.calculate_water_analysis_with_recommendations_view, name='calculate_water_analysis_with_recommendations'),
     
     # Custom Swagger UI
 ] 

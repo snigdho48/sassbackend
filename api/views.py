@@ -1083,6 +1083,235 @@ def calculate_water_analysis_view(request):
         })
             
     except Exception as e:
+        print(f"Error calculating indices: {e}")
+        return Response({
+            'error': f'Calculation error: {str(e)}'
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def calculate_water_analysis_with_recommendations_view(request):
+    """Calculate water analysis indices and return recommendations in a single response."""
+    try:
+        # Extract parameters from request and convert to float
+        ph = float(request.data.get('ph', 0))
+        tds = float(request.data.get('tds', 0))
+        total_alkalinity = float(request.data.get('total_alkalinity', 0))
+        hardness = float(request.data.get('hardness', 0))
+        chloride = float(request.data.get('chloride', 0))
+        temperature = float(request.data.get('temperature', 0))
+        
+        # Calculate indices directly without saving to database
+        # LSI calculation
+        temp_factor = 0.1 * (temperature - 25)
+        tds_factor = 0.01 * (tds - 150)
+        phs = 9.3 + temp_factor + tds_factor
+        lsi = ph - phs
+        
+        # RSI calculation
+        rsi = 2 * phs - ph
+        
+        # LS calculation
+        ls = chloride / total_alkalinity if total_alkalinity > 0 else 0
+        
+        # Determine status
+        lsi_status = "Scaling Likely" if lsi > 0.5 else ("Corrosion Likely" if lsi < -0.5 else "Stable")
+        rsi_status = "Scaling Likely" if rsi < 6.0 else ("Corrosion Likely" if rsi > 7.0 else "Stable")
+        ls_status = "Corrosion Likely" if ls > 0.8 else ("Acceptable" if ls < 0.2 else "Moderate")
+        
+        # Overall status
+        lsi_score = 1 if lsi_status == "Stable" else 0
+        rsi_score = 1 if rsi_status == "Stable" else 0
+        ls_score = 1 if ls_status in ["Acceptable", "Moderate"] else 0
+        total_score = lsi_score + rsi_score + ls_score
+        
+        overall_status = "Stable" if total_score >= 2 else ("Moderate" if total_score >= 1 else "Unstable")
+        
+        # Calculate stability score (0-100)
+        base_score = 50
+        if lsi_status == "Stable":
+            base_score += 20
+        elif lsi_status == "Scaling Likely":
+            base_score -= 10
+        elif lsi_status == "Corrosion Likely":
+            base_score -= 20
+        
+        if rsi_status == "Stable":
+            base_score += 20
+        elif rsi_status == "Scaling Likely":
+            base_score -= 10
+        elif rsi_status == "Corrosion Likely":
+            base_score -= 20
+        
+        if ls_status in ["Acceptable", "Moderate"]:
+            base_score += 10
+        elif ls_status == "Corrosion Likely":
+            base_score -= 10
+        
+        stability_score = max(0, min(100, base_score))
+        
+        # Generate recommendations based on calculated results
+        recommendations = []
+        
+        # Static recommendations
+        static_recommendations = [
+            {
+                'id': 'static_1',
+                'title': 'Regular Water Testing',
+                'description': 'Conduct monthly water quality tests to monitor changes in water parameters.',
+                'type': 'monitoring',
+                'priority': 'high',
+                'is_implemented': False,
+                'created_at': timezone.now().isoformat(),
+                'source': 'static'
+            },
+            {
+                'id': 'static_2',
+                'title': 'Maintain Treatment Equipment',
+                'description': 'Regular maintenance of water treatment systems ensures optimal performance.',
+                'type': 'maintenance',
+                'priority': 'medium',
+                'is_implemented': False,
+                'created_at': timezone.now().isoformat(),
+                'source': 'static'
+            },
+            {
+                'id': 'static_3',
+                'title': 'Document Water Quality',
+                'description': 'Keep detailed records of water quality parameters and treatment actions.',
+                'type': 'monitoring',
+                'priority': 'medium',
+                'is_implemented': False,
+                'created_at': timezone.now().isoformat(),
+                'source': 'static'
+            }
+        ]
+        recommendations.extend(static_recommendations)
+        
+        # Dynamic recommendations based on calculated results
+        dynamic_recommendations = []
+        
+        # LSI-based recommendations
+        if lsi_status == "Corrosion Likely":
+            dynamic_recommendations.append({
+                'id': f'dynamic_lsi_corrosion_{int(timezone.now().timestamp())}',
+                'title': 'Corrosion Prevention Required',
+                'description': f'LSI of {round(lsi, 2)} indicates corrosion risk. Consider pH adjustment or corrosion inhibitors.',
+                'type': 'corrosion',
+                'priority': 'high',
+                'is_implemented': False,
+                'created_at': timezone.now().isoformat(),
+                'source': 'dynamic'
+            })
+        elif lsi_status == "Scaling Likely":
+            dynamic_recommendations.append({
+                'id': f'dynamic_lsi_scaling_{int(timezone.now().timestamp())}',
+                'title': 'Scaling Prevention Required',
+                'description': f'LSI of {round(lsi, 2)} indicates scaling risk. Consider pH adjustment or scale inhibitors.',
+                'type': 'scaling',
+                'priority': 'high',
+                'is_implemented': False,
+                'created_at': timezone.now().isoformat(),
+                'source': 'dynamic'
+            })
+        
+        # RSI-based recommendations
+        if rsi_status == "Corrosion Likely":
+            dynamic_recommendations.append({
+                'id': f'dynamic_rsi_corrosion_{int(timezone.now().timestamp())}',
+                'title': 'High Corrosion Risk',
+                'description': f'RSI of {round(rsi, 2)} indicates high corrosion potential. Implement corrosion control measures.',
+                'type': 'corrosion',
+                'priority': 'high',
+                'is_implemented': False,
+                'created_at': timezone.now().isoformat(),
+                'source': 'dynamic'
+            })
+        elif rsi_status == "Scaling Likely":
+            dynamic_recommendations.append({
+                'id': f'dynamic_rsi_scaling_{int(timezone.now().timestamp())}',
+                'title': 'High Scaling Risk',
+                'description': f'RSI of {round(rsi, 2)} indicates high scaling potential. Implement scale control measures.',
+                'type': 'scaling',
+                'priority': 'high',
+                'is_implemented': False,
+                'created_at': timezone.now().isoformat(),
+                'source': 'dynamic'
+            })
+        
+        # LS-based recommendations
+        if ls_status == "Corrosion Likely":
+            dynamic_recommendations.append({
+                'id': f'dynamic_ls_corrosion_{int(timezone.now().timestamp())}',
+                'title': 'Chloride-Induced Corrosion',
+                'description': f'LS of {round(ls, 2)} indicates chloride-induced corrosion risk. Consider chloride removal or corrosion inhibitors.',
+                'type': 'corrosion',
+                'priority': 'medium',
+                'is_implemented': False,
+                'created_at': timezone.now().isoformat(),
+                'source': 'dynamic'
+            })
+        
+        # pH-based recommendations
+        if ph < 6.5:
+            dynamic_recommendations.append({
+                'id': f'dynamic_ph_low_{int(timezone.now().timestamp())}',
+                'title': 'Low pH Correction',
+                'description': f'pH of {ph} is too low. Consider pH adjustment to prevent corrosion.',
+                'type': 'treatment',
+                'priority': 'medium',
+                'is_implemented': False,
+                'created_at': timezone.now().isoformat(),
+                'source': 'dynamic'
+            })
+        elif ph > 8.5:
+            dynamic_recommendations.append({
+                'id': f'dynamic_ph_high_{int(timezone.now().timestamp())}',
+                'title': 'High pH Correction',
+                'description': f'pH of {ph} is too high. Consider pH adjustment to prevent scaling.',
+                'type': 'treatment',
+                'priority': 'medium',
+                'is_implemented': False,
+                'created_at': timezone.now().isoformat(),
+                'source': 'dynamic'
+            })
+        
+        # TDS-based recommendations
+        if tds > 500:
+            dynamic_recommendations.append({
+                'id': f'dynamic_tds_high_{int(timezone.now().timestamp())}',
+                'title': 'High TDS Levels',
+                'description': f'TDS of {tds} ppm is elevated. Consider water treatment or filtration.',
+                'type': 'treatment',
+                'priority': 'medium',
+                'is_implemented': False,
+                'created_at': timezone.now().isoformat(),
+                'source': 'dynamic'
+            })
+        
+        # Add dynamic recommendations to response
+        recommendations.extend(dynamic_recommendations)
+        
+        # Sort by priority and creation date
+        recommendations.sort(key=lambda x: (x['priority'] == 'high', str(x['created_at'])), reverse=True)
+        
+        return Response({
+            'calculation': {
+                'lsi': round(lsi, 2),
+                'rsi': round(rsi, 2),
+                'ls': round(ls, 2),
+                'stability_score': round(stability_score, 2),
+                'lsi_status': lsi_status,
+                'rsi_status': rsi_status,
+                'ls_status': ls_status,
+                'overall_status': overall_status
+            },
+            'recommendations': recommendations
+        })
+            
+    except Exception as e:
+        print(f"Error in combined calculation: {e}")
         return Response({
             'error': f'Calculation error: {str(e)}'
         }, status=status.HTTP_400_BAD_REQUEST)
