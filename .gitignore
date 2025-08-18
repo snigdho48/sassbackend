@@ -137,9 +137,9 @@ dmypy.json
 *.tmp
 
 # Database
-# *.db
-# *.sqlite
-# *.sqlite3
+*.db
+*.sqlite
+*.sqlite3
 frontend/
 # Logs
 logs/
