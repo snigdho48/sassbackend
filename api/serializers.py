@@ -39,7 +39,14 @@ class LoginSerializer(serializers.Serializer):
         password = attrs.get('password')
 
         if email and password:
-            user = authenticate(request=self.context.get('request'), email=email, password=password)
+            # IMPORTANT: Django's default auth backends expect the keyword 'username'
+            # even when the user model's USERNAME_FIELD is 'email'. So we pass the
+            # email value using the 'username' kwarg to ensure compatibility.
+            user = authenticate(
+                request=self.context.get('request'),
+                username=email,
+                password=password,
+            )
             if not user:
                 raise serializers.ValidationError('Invalid email or password.')
             if not user.is_active:

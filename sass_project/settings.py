@@ -32,8 +32,12 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-__ww_%z2^4$jxtoi+tfy05u2=w
 DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
 
 ALLOWED_HOSTS = ['*',  
-                 "https://sassbackend.reachableads.com",
-    "https://sass.reachableads.com",]
+                 "sassbackend.reachableads.com",
+    "sass.reachableads.com",
+    "127.0.0.1",
+    "localhost",
+    'http://localhost:13595/'
+    ]
 
 
 # Application definition
@@ -229,10 +233,11 @@ INTERNAL_IPS = [
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://localhost:10272",
+
     "http://192.168.68.65:3000",
     "https://sassbackend.reachableads.com",
     "https://sass.reachableads.com",
-
 ]
 
 CORS_ALLOW_CREDENTIALS = True
