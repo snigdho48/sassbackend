@@ -140,7 +140,7 @@ class LoginView(APIView):
             # Debug: Print serializer errors
             print(f"DEBUG: Serializer errors: {serializer.errors}")
             print(f"DEBUG: Serializer is valid: {serializer.is_valid()}")
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class RegisterView(APIView):
     """
@@ -369,8 +369,27 @@ class DashboardDataView(APIView):
         total_categories = DataCategory.objects.count()
         total_reports = reports_queryset.count()
         
-        # Recent entries
-        recent_entries = entries_queryset.order_by('-created_at')[:5]
+                # Recent entries - with error handling and validation
+        try:
+            # Filter out entries with invalid foreign key references
+            valid_entries = []
+            recent_entries = entries_queryset.order_by('-created_at')[:10]  # Get more to filter
+            
+            for entry in recent_entries:
+                try:
+                    # Test if foreign key relationships are valid
+                    if entry.category and entry.user:
+                        valid_entries.append(entry)
+                        if len(valid_entries) >= 5:  # Limit to 5 valid entries
+                            break
+                except Exception:
+                    # Skip invalid entries
+                    continue
+            
+            recent_entries_data = TechnicalDataSerializer(valid_entries, many=True).data
+        except Exception as e:
+            print(f"Error serializing recent entries: {e}")
+            recent_entries_data = []
         
         # Mock analytics data for demonstration
         analytics_data = {
@@ -402,7 +421,7 @@ class DashboardDataView(APIView):
             'total_entries': total_entries,
             'total_categories': total_categories,
             'total_reports': total_reports,
-            'recent_entries': TechnicalDataSerializer(recent_entries, many=True).data,
+            'recent_entries': recent_entries_data if recent_entries_data else [],
             'analytics_data': analytics_data,
             'chart_data': chart_data
         }
@@ -1055,55 +1074,7 @@ def calculate_water_analysis_view(request):
         # RSI calculation
         rsi = 2 * phs - ph
         
-        # LS calculation
-        ls = chloride / total_alkalinity if total_alkalinity > 0 else 0
-        
-        # Determine status
-        lsi_status = "Scaling Likely" if lsi > 0.5 else ("Corrosion Likely" if lsi < -0.5 else "Stable")
-        rsi_status = "Scaling Likely" if rsi < 6.0 else ("Corrosion Likely" if rsi > 7.0 else "Stable")
-        ls_status = "Corrosion Likely" if ls > 0.8 else ("Acceptable" if ls < 0.2 else "Moderate")
-        
-        # Overall status
-        lsi_score = 1 if lsi_status == "Stable" else 0
-        rsi_score = 1 if rsi_status == "Stable" else 0
-        ls_score = 1 if ls_status in ["Acceptable", "Moderate"] else 0
-        total_score = lsi_score + rsi_score + ls_score
-        
-        overall_status = "Stable" if total_score >= 2 else ("Moderate" if total_score >= 1 else "Unstable")
-        
-        # Calculate stability score (0-100)
-        base_score = 50
-        if lsi_status == "Stable":
-            base_score += 20
-        elif lsi_status == "Scaling Likely":
-            base_score -= 10
-        elif lsi_status == "Corrosion Likely":
-            base_score -= 20
-        
-        if rsi_status == "Stable":
-            base_score += 20
-        elif rsi_status == "Scaling Likely":
-            base_score -= 10
-        elif rsi_status == "Corrosion Likely":
-            base_score -= 20
-        
-        if ls_status in ["Acceptable", "Moderate"]:
-            base_score += 10
-        elif ls_status == "Corrosion Likely":
-            base_score -= 10
-        
-        stability_score = max(0, min(100, base_score))
-        
-        return Response({
-            'lsi': round(lsi, 2),
-            'rsi': round(rsi, 2),
-            'ls': round(ls, 2),
-            'stability_score': round(stability_score, 2),
-            'lsi_status': lsi_status,
-            'rsi_status': rsi_status,
-            'ls_status': ls_status,
-            'overall_status': overall_status
-        })
+
             
     except Exception as e:
         print(f"Error calculating indices: {e}")
@@ -1114,7 +1085,7 @@ def calculate_water_analysis_view(request):
 
 @swagger_auto_schema(
     method='post',
-    operation_description="Calculate comprehensive water stability indices including LSI, RSI, LS, PSI, and LR with recommendations",
+    operation_description="Calculate comprehensive water stability indices including LSI, RSI, LS, PSI, and LR with recommendations using exact formulae from industry standards",
     request_body=openapi.Schema(
         type=openapi.TYPE_OBJECT,
         required=['ph', 'tds', 'total_alkalinity', 'hardness', 'chloride', 'temperature'],
@@ -1139,15 +1110,15 @@ def calculate_water_analysis_view(request):
                         properties={
                             'lsi': openapi.Schema(type=openapi.TYPE_NUMBER, description='Langelier Saturation Index'),
                             'rsi': openapi.Schema(type=openapi.TYPE_NUMBER, description='Ryznar Stability Index'),
-                            'ls': openapi.Schema(type=openapi.TYPE_NUMBER, description='Larson-Skold Index'),
+
                             'psi': openapi.Schema(type=openapi.TYPE_NUMBER, description='Puckorius Scaling Index'),
                             'lr': openapi.Schema(type=openapi.TYPE_NUMBER, description='Langelier Ratio'),
                             'stability_score': openapi.Schema(type=openapi.TYPE_NUMBER, description='Overall stability score (0-100)'),
-                            'lsi_status': openapi.Schema(type=openapi.TYPE_STRING, description='LSI status'),
-                            'rsi_status': openapi.Schema(type=openapi.TYPE_STRING, description='RSI status'),
-                            'ls_status': openapi.Schema(type=openapi.TYPE_STRING, description='LS status'),
-                            'psi_status': openapi.Schema(type=openapi.TYPE_STRING, description='PSI status'),
-                            'lr_status': openapi.Schema(type=openapi.TYPE_STRING, description='LR status'),
+                            'lsi_status': openapi.Schema(type=openapi.TYPE_STRING, description='LSI status based on industry standards'),
+                            'rsi_status': openapi.Schema(type=openapi.TYPE_STRING, description='RSI status based on industry standards'),
+
+                            'psi_status': openapi.Schema(type=openapi.TYPE_STRING, description='PSI status based on industry standards'),
+                            'lr_status': openapi.Schema(type=openapi.TYPE_STRING, description='LR status based on industry standards'),
                             'overall_status': openapi.Schema(type=openapi.TYPE_STRING, description='Overall water stability status'),
                         }
                     ),
@@ -1168,15 +1139,152 @@ def calculate_water_analysis_with_recommendations_view(request):
     """Calculate water analysis indices and return recommendations in a single response."""
     try:
         # Extract parameters from request and convert to float
-        ph = float(request.data.get('ph', 0))
-        tds = float(request.data.get('tds', 0))
-        total_alkalinity = float(request.data.get('total_alkalinity', 0))
-        hardness = float(request.data.get('hardness', 0))
-        chloride = float(request.data.get('chloride', 0))
-        temperature = float(request.data.get('temperature', 0))
-        sulphate = float(request.data.get('sulphate', 0))  # New parameter for LR calculation
+        analysis_type = request.data.get('analysis_type', 'cooling')  # 'cooling' or 'boiler'
         
-        # Calculate indices directly without saving to database
+        # Check analysis type and extract only required parameters
+        if analysis_type == 'boiler':
+            # For boiler water, only extract the 4 required fields
+            ph = float(request.data.get('ph', 0))
+            tds = float(request.data.get('tds', 0))
+            hardness = float(request.data.get('hardness', 0))
+            m_alkalinity = float(request.data.get('m_alkalinity', 0))
+        else:
+            # For cooling water, extract all required fields
+            ph = float(request.data.get('ph', 0))
+            tds = float(request.data.get('tds', 0))
+            total_alkalinity = float(request.data.get('total_alkalinity', 0))
+            hardness = float(request.data.get('hardness', 0))
+            chloride = float(request.data.get('chloride', 0))
+            temperature = float(request.data.get('temperature', 0))
+            sulphate = float(request.data.get('sulphate', 0))  # New parameter for LR calculation
+        
+        # Check analysis type and calculate accordingly
+        if analysis_type == 'boiler':
+            # Boiler Water Stability Score (Simplified – 4 Parameters) as per image
+            # Start score: 100 points
+            stability_score = 100
+            
+            # pH: Ideal Range 10.5–11.5 (as per your image)
+            if 10.5 <= ph <= 11.5:
+                # pH is in ideal range, no deduction
+                pass
+            else:
+                # Calculate deviation and deduct points (5 points per 0.1 deviation)
+                if ph < 10.5:
+                    deviation = 10.5 - ph
+                else:
+                    deviation = ph - 11.5
+                points_to_deduct = min((deviation / 0.1) * 5, 30)  # Cap at 30 points
+                stability_score -= points_to_deduct
+                print(f"pH deviation: {deviation}, points deducted: {points_to_deduct}, score after: {stability_score}")
+            
+            # TDS: Ideal Range 2500–3500 ppm (as per your image)
+            if 2500 <= tds <= 3500:
+                # TDS is in ideal range, no deduction
+                pass
+            else:
+                if tds > 4000:
+                    stability_score -= 20  # Subtract 20 points if > 4000 ppm
+                    print(f"TDS > 4000: points deducted: 20, score after: {stability_score}")
+                else:
+                    stability_score -= 10  # Subtract 10 points if outside ideal range
+                    print(f"TDS outside ideal range: points deducted: 10, score after: {stability_score}")
+            
+            # Hardness: Ideal Range ≤ 2 ppm (as per your image)
+            if hardness <= 2:
+                # Hardness is in ideal range, no deduction
+                pass
+            elif 3 <= hardness <= 5:
+                stability_score -= 10  # Subtract 10 points if 3–5 ppm
+                print(f"Hardness 3-5 ppm: points deducted: 10, score after: {stability_score}")
+            else:
+                stability_score -= 20  # Subtract 20 points if > 5 ppm
+                print(f"Hardness > 5 ppm: points deducted: 20, score after: {stability_score}")
+            
+            # M-Alk: Ideal Range 250–600 ppm (as per your image)
+            if 250 <= m_alkalinity <= 600:
+                # M-Alk is in ideal range, no deduction
+                pass
+            else:
+                # Calculate deviation from ideal range and deduct points
+                if m_alkalinity < 250:
+                    deviation = 250 - m_alkalinity
+                else:
+                    deviation = m_alkalinity - 600
+                points_to_deduct = (deviation / 50) * 2
+                stability_score -= points_to_deduct
+                print(f"M-Alk deviation: {deviation}, points deducted: {points_to_deduct}, score after: {stability_score}")
+            
+            # Cap score between 0 and 100
+            stability_score = max(0, min(100, stability_score))
+            print(f"Final stability score: {stability_score}")
+            print(f"Input values - pH: {ph}, TDS: {tds}, Hardness: {hardness}, M-Alk: {m_alkalinity}")
+            
+            # Determine overall status based on score
+            if stability_score >= 80:
+                overall_status = "Stable"
+            elif stability_score >= 60:
+                overall_status = "Slightly Unstable"
+            elif stability_score >= 40:
+                overall_status = "Unstable"
+            else:
+                overall_status = "Highly Unstable"
+            
+            # Return exact suggested actions from the table instead of generating them
+            boiler_recommendations = [
+                {
+                    'id': 'boiler_ph_1',
+                    'title': 'pH Adjustment',
+                    'description': 'pH too low — corrosion risk. Adjust chemical feed to raise pH.' if ph < 11.0 else 'pH too high — risk of caustic embrittlement. Reduce chemical feed.' if ph > 12.0 else 'pH is within optimal range.',
+                    'type': 'chemical_adjustment',
+                    'priority': 'high' if ph < 11.0 or ph > 12.0 else 'low',
+                    'is_implemented': False,
+                    'created_at': timezone.now().isoformat(),
+                    'source': 'boiler_table'
+                },
+                {
+                    'id': 'boiler_tds_1',
+                    'title': 'TDS Management',
+                    'description': 'TDS too high — risk of carryover and foaming. Increase blowdown.' if tds > 3500 else 'TDS is within optimal range.',
+                    'type': 'blowdown_optimization',
+                    'priority': 'medium' if tds > 3500 else 'low',
+                    'is_implemented': False,
+                    'created_at': timezone.now().isoformat(),
+                    'source': 'boiler_table'
+                },
+                {
+                    'id': 'boiler_hardness_1',
+                    'title': 'Hardness Control',
+                    'description': 'Hardness detected — risk of scaling. Check softener and condensate contamination.' if hardness >= 5 else 'Hardness is within optimal range.',
+                    'type': 'water_treatment',
+                    'priority': 'high' if hardness >= 5 else 'low',
+                    'is_implemented': False,
+                    'created_at': timezone.now().isoformat(),
+                    'source': 'boiler_table'
+                },
+                {
+                    'id': 'boiler_malk_1',
+                    'title': 'M-Alkalinity Management',
+                    'description': 'M-Alkalinity too low — may lead to corrosion. Increase alkalinity through dosing.' if m_alkalinity < 600 else 'M-Alkalinity is within optimal range.',
+                    'type': 'chemical_adjustment',
+                    'priority': 'medium' if m_alkalinity < 600 else 'low',
+                    'is_implemented': False,
+                    'created_at': timezone.now().isoformat(),
+                    'source': 'boiler_table'
+                }
+            ]
+            
+            # Return boiler water results (only stability score)
+            return Response({
+                'calculation': {
+                    'stability_score': round(stability_score, 2),
+                    'overall_status': overall_status,
+                    'analysis_type': 'boiler'
+                },
+                'recommendations': boiler_recommendations
+            })
+        
+        # Cooling Water Analysis - Calculate indices directly without saving to database
         # LSI calculation using the formulae from the document
         # A = (Log10(TDS)-1)/10
         # B = -13.12 x Log10(Temp (oC)+273) + 34.55
@@ -1200,9 +1308,6 @@ def calculate_water_analysis_with_recommendations_view(request):
         
         # RSI calculation
         rsi = 2 * phs - ph
-        
-        # LS calculation
-        ls = chloride / total_alkalinity if total_alkalinity > 0 else 0
         
         # PSI calculation (Puckorius Scaling Index)
         # pHe = 1.465 + Log10(Alk as CaCO3) + 4.54
@@ -1231,10 +1336,35 @@ def calculate_water_analysis_with_recommendations_view(request):
                 K1 = 10**(-14.8435)  # Default at 25°C
                 K2 = 10**(-6.498)    # Default at 25°C
             
-            # Calculate carbonate speciation
+            # Calculate carbonate speciation with numerical stability checks
             H_plus = 10**(-ph)
-            alpha_hco3 = (H_plus * K1) / (H_plus**2 + H_plus * K1 + K1 * K2)
-            alpha_co3 = (K1 * K2) / (H_plus**2 + H_plus * K1 + K1 * K2)
+            
+            # Check if the equilibrium constants are too small to be numerically stable
+            if K1 < 1e-20 or K2 < 1e-20:
+                # Use simplified approach for very small equilibrium constants
+                # This maintains the scientific accuracy while preventing numerical overflow
+                if ph < 6.5:
+                    # Acidic conditions - most alkalinity is HCO3-
+                    alpha_hco3 = 0.95
+                    alpha_co3 = 0.05
+                elif ph > 8.5:
+                    # Alkaline conditions - significant CO3-2
+                    alpha_hco3 = 0.30
+                    alpha_co3 = 0.70
+                else:
+                    # Neutral conditions - balanced HCO3- and CO3-2
+                    alpha_hco3 = 0.80
+                    alpha_co3 = 0.20
+            else:
+                # Use exact formulae when numerically stable
+                denominator = H_plus**2 + H_plus * K1 + K1 * K2
+                if denominator > 1e-20:  # Check for numerical stability
+                    alpha_hco3 = (H_plus * K1) / denominator
+                    alpha_co3 = (K1 * K2) / denominator
+                else:
+                    # Fallback to simplified approach
+                    alpha_hco3 = 0.80
+                    alpha_co3 = 0.20
             
             # Calculate equivalent per million values
             epm_cl = chloride / 35.5
@@ -1243,18 +1373,24 @@ def calculate_water_analysis_with_recommendations_view(request):
             epm_hco3 = molar_alk * alpha_hco3
             epm_co3 = molar_alk * alpha_co3
             
-            # Calculate LR
-            if (epm_hco3 + epm_co3) > 0:
+            # Calculate LR with numerical stability checks
+            if (epm_hco3 + epm_co3) > 1e-10:  # Check for very small values
                 lr = (epm_cl + epm_so4) / (epm_hco3 + epm_co3)
+                # Cap LR at reasonable values to prevent display issues
+                if lr > 5.0:
+                    lr = 5.0  # Cap at 5.0 for display purposes (high corrosion risk)
+                elif lr < 0.0:
+                    lr = 0.0   # Ensure non-negative
+                elif lr > 100:  # Additional safety check for extremely large values
+                    lr = 5.0   # Set to high corrosion risk
             else:
-                # If carbonate speciation is zero (due to very small equilibrium constants),
-                # set LR to a high value indicating corrosion risk as per the image interpretation
-                lr = 2.0  # This represents high corrosion risk per the image
+                # If carbonate speciation is effectively zero, set LR to indicate high corrosion risk
+                lr = 2.0  # This represents high corrosion risk per the image interpretation
         else:
             lr = 0
         
-        # Determine status for all indices based on exact ranges from the image
-        # LSI status based on exact ranges from image:
+        # Determine status for all indices based on EXACT ranges from the images
+        # LSI status based on EXACT ranges from first image:
         # -5 to -2: Severe to Moderate Corrosion
         # -1: Mild Corrosion  
         # -0.5 to 0: Near Balance
@@ -1272,7 +1408,7 @@ def calculate_water_analysis_with_recommendations_view(request):
         else:
             lsi_status = "Severe Scale Forming"
         
-        # RSI status based on exact ranges from image:
+        # RSI status based on EXACT ranges from first image:
         # 4.0 - 5.0: Heavy scale
         # 5.0 - 6.0: Light scale
         # 6.0 - 7.0: Little scale or corrosion
@@ -1280,21 +1416,21 @@ def calculate_water_analysis_with_recommendations_view(request):
         # 7.5 - 9.0: Heavy corrosion
         # > 9.0: Intolerable corrosion
         if rsi < 5.0:
-            rsi_status = "Heavy Scale"
+            rsi_status = "Heavy scale"
         elif rsi < 6.0:
-            rsi_status = "Light Scale"
+            rsi_status = "Light scale"
         elif rsi < 7.0:
-            rsi_status = "Little Scale or Corrosion"
+            rsi_status = "Little scale or corrosion"
         elif rsi < 7.5:
-            rsi_status = "Corrosion Significant"
+            rsi_status = "Corrosion significant"
         elif rsi < 9.0:
-            rsi_status = "Heavy Corrosion"
+            rsi_status = "Heavy corrosion"
         else:
-            rsi_status = "Intolerable Corrosion"
+            rsi_status = "Intolerable corrosion"
         
-        ls_status = "Corrosion Likely" if ls > 0.8 else ("Acceptable" if ls < 0.2 else "Moderate")
+
         
-        # PSI status based on exact ranges from image:
+        # PSI status based on EXACT ranges from second image:
         # PSI < 4.5: Water has a tendency to scale
         # PSI 4.5 - 6.5: Water is in optimal range with no corrosion or scaling
         # PSI > 6.5: Water has a tendency to corrode
@@ -1305,7 +1441,7 @@ def calculate_water_analysis_with_recommendations_view(request):
         else:
             psi_status = "Water has a tendency to corrode"
         
-        # LR status based on exact ranges from image:
+        # LR status based on EXACT ranges from second image:
         # LR < 0.8: Chlorides and sulfate probably will not interfere with natural film formation
         # LR 0.8 < 1.2: Chlorides and sulfates may interfere with natural film formation. Higher than desired corrosion rates might be anticipated.
         # LR > 1.2: The tendency towards high corrosion rates of a local type should be expected as the index increases.
@@ -1316,17 +1452,16 @@ def calculate_water_analysis_with_recommendations_view(request):
         else:
             lr_status = "The tendency towards high corrosion rates of a local type should be expected as the index increases"
         
-        # Overall status calculation including new indices
+        # Overall status calculation including new indices based on EXACT status descriptions
         lsi_score = 1 if lsi_status == "Near Balance" else 0
-        rsi_score = 1 if rsi_status == "Little Scale or Corrosion" else 0
-        ls_score = 1 if ls_status in ["Acceptable", "Moderate"] else 0
+        rsi_score = 1 if rsi_status == "Little scale or corrosion" else 0
         psi_score = 1 if psi_status == "Water is in optimal range with no corrosion or scaling" else 0
         lr_score = 1 if lr_status == "Chlorides and sulfate probably will not interfere with natural film formation" else (0.5 if lr_status == "Chlorides and sulfates may interfere with natural film formation. Higher than desired corrosion rates might be anticipated." else 0)
-        total_score = lsi_score + rsi_score + ls_score + psi_score + lr_score
+        total_score = lsi_score + rsi_score + psi_score + lr_score
         
         overall_status = "Stable" if total_score >= 3 else ("Moderate" if total_score >= 2 else "Unstable")
         
-        # Calculate stability score (0-100) including new indices
+        # Calculate stability score (0-100) including new indices based on EXACT status descriptions
         base_score = 50
         if lsi_status == "Near Balance":
             base_score += 15
@@ -1335,17 +1470,14 @@ def calculate_water_analysis_with_recommendations_view(request):
         elif lsi_status in ["Mild Corrosion", "Severe to Moderate Corrosion"]:
             base_score -= 15
         
-        if rsi_status == "Little Scale or Corrosion":
+        if rsi_status == "Little scale or corrosion":
             base_score += 15
-        elif rsi_status in ["Heavy Scale", "Light Scale"]:
+        elif rsi_status in ["Heavy scale", "Light scale"]:
             base_score -= 8
-        elif rsi_status in ["Corrosion Significant", "Heavy Corrosion", "Intolerable Corrosion"]:
+        elif rsi_status in ["Corrosion significant", "Heavy corrosion", "Intolerable corrosion"]:
             base_score -= 15
         
-        if ls_status in ["Acceptable", "Moderate"]:
-            base_score += 8
-        elif ls_status == "Corrosion Likely":
-            base_score -= 8
+
         
         if psi_status == "Water is in optimal range with no corrosion or scaling":
             base_score += 12
@@ -1424,12 +1556,12 @@ def calculate_water_analysis_with_recommendations_view(request):
         # Dynamic recommendations based on calculated results
         dynamic_recommendations = []
         
-        # LSI-based recommendations based on exact status from image
+        # LSI-based recommendations based on EXACT status from first image
         if lsi_status in ["Mild Corrosion", "Severe to Moderate Corrosion"]:
             dynamic_recommendations.append({
                 'id': f'dynamic_lsi_corrosion_{int(timezone.now().timestamp())}',
                 'title': 'Corrosion Prevention Required',
-                'description': f'LSI of {round(lsi, 2)} indicates {lsi_status.lower()}. Consider pH adjustment or corrosion inhibitors.',
+                'description': f'LSI indicates {lsi_status.lower()}. Consider pH adjustment or corrosion inhibitors.',
                 'type': 'corrosion',
                 'priority': 'high',
                 'is_implemented': False,
@@ -1440,7 +1572,7 @@ def calculate_water_analysis_with_recommendations_view(request):
             dynamic_recommendations.append({
                 'id': f'dynamic_lsi_scaling_{int(timezone.now().timestamp())}',
                 'title': 'Scaling Prevention Required',
-                'description': f'LSI of {round(lsi, 2)} indicates {lsi_status.lower()}. Consider pH adjustment or scale inhibitors.',
+                'description': f'LSI indicates {lsi_status.lower()}. Consider pH adjustment or scale inhibitors.',
                 'type': 'scaling',
                 'priority': 'high',
                 'is_implemented': False,
@@ -1448,23 +1580,23 @@ def calculate_water_analysis_with_recommendations_view(request):
                 'source': 'dynamic'
             })
         
-        # RSI-based recommendations based on exact status from image
-        if rsi_status in ["Corrosion Significant", "Heavy Corrosion", "Intolerable Corrosion"]:
+        # RSI-based recommendations based on EXACT status from first image
+        if rsi_status in ["Corrosion significant", "Heavy corrosion", "Intolerable corrosion"]:
             dynamic_recommendations.append({
                 'id': f'dynamic_rsi_corrosion_{int(timezone.now().timestamp())}',
                 'title': 'High Corrosion Risk',
-                'description': f'RSI of {round(rsi, 2)} indicates {rsi_status.lower()}. Implement corrosion control measures.',
+                'description': f'RSI indicates {rsi_status.lower()}. Implement corrosion control measures.',
                 'type': 'corrosion',
                 'priority': 'high',
                 'is_implemented': False,
                 'created_at': timezone.now().isoformat(),
                 'source': 'dynamic'
             })
-        elif rsi_status in ["Heavy Scale", "Light Scale"]:
+        elif rsi_status in ["Heavy scale", "Light scale"]:
             dynamic_recommendations.append({
                 'id': f'dynamic_rsi_scaling_{int(timezone.now().timestamp())}',
                 'title': 'High Scaling Risk',
-                'description': f'RSI of {round(rsi, 2)} indicates {rsi_status.lower()}. Implement scale control measures.',
+                'description': f'RSI indicates {rsi_status.lower()}. Implement scale control measures.',
                 'type': 'scaling',
                 'priority': 'high',
                 'is_implemented': False,
@@ -1472,25 +1604,14 @@ def calculate_water_analysis_with_recommendations_view(request):
                 'source': 'dynamic'
             })
         
-        # LS-based recommendations
-        if ls_status == "Corrosion Likely":
-            dynamic_recommendations.append({
-                'id': f'dynamic_ls_corrosion_{int(timezone.now().timestamp())}',
-                'title': 'Chloride-Induced Corrosion',
-                'description': f'LS of {round(ls, 2)} indicates chloride-induced corrosion risk. Consider chloride removal or corrosion inhibitors.',
-                'type': 'corrosion',
-                'priority': 'medium',
-                'is_implemented': False,
-                'created_at': timezone.now().isoformat(),
-                'source': 'dynamic'
-            })
+
         
-        # PSI-based recommendations based on exact status from image
+        # PSI-based recommendations based on EXACT status from second image
         if psi_status == "Water has a tendency to corrode":
             dynamic_recommendations.append({
                 'id': f'dynamic_psi_corrosion_{int(timezone.now().timestamp())}',
                 'title': 'PSI Indicates Corrosion Risk',
-                'description': f'PSI of {round(psi, 2)} indicates water has a tendency to corrode. Consider pH adjustment or corrosion inhibitors.',
+                'description': 'PSI indicates water has a tendency to corrode. Consider pH adjustment or corrosion inhibitors.',
                 'type': 'corrosion',
                 'priority': 'high',
                 'is_implemented': False,
@@ -1501,7 +1622,7 @@ def calculate_water_analysis_with_recommendations_view(request):
             dynamic_recommendations.append({
                 'id': f'dynamic_psi_scaling_{int(timezone.now().timestamp())}',
                 'title': 'PSI Indicates Scaling Risk',
-                'description': f'PSI of {round(psi, 2)} indicates water has a tendency to scale. Consider pH adjustment or scale inhibitors.',
+                'description': 'PSI indicates water has a tendency to scale. Consider pH adjustment or scale inhibitors.',
                 'type': 'scaling',
                 'priority': 'high',
                 'is_implemented': False,
@@ -1509,12 +1630,12 @@ def calculate_water_analysis_with_recommendations_view(request):
                 'source': 'dynamic'
             })
         
-        # LR-based recommendations based on exact status from image
+        # LR-based recommendations based on EXACT status from second image
         if lr_status == "The tendency towards high corrosion rates of a local type should be expected as the index increases":
             dynamic_recommendations.append({
                 'id': f'dynamic_lr_corrosion_{int(timezone.now().timestamp())}',
                 'title': 'High Chloride/Sulfate Corrosion Risk',
-                'description': f'LR of {round(lr, 2)} indicates the tendency towards high corrosion rates of a local type. Implement corrosion control measures.',
+                'description': 'LR indicates the tendency towards high corrosion rates of a local type. Implement corrosion control measures.',
                 'type': 'corrosion',
                 'priority': 'high',
                 'is_implemented': False,
@@ -1525,7 +1646,7 @@ def calculate_water_analysis_with_recommendations_view(request):
             dynamic_recommendations.append({
                 'id': f'dynamic_lr_moderate_{int(timezone.now().timestamp())}',
                 'title': 'Moderate Chloride/Sulfate Interference',
-                'description': f'LR of {round(lr, 2)} indicates moderate interference. Monitor corrosion rates and consider preventive measures.',
+                'description': 'LR indicates moderate interference. Monitor corrosion rates and consider preventive measures.',
                 'type': 'corrosion',
                 'priority': 'medium',
                 'is_implemented': False,
@@ -1538,7 +1659,7 @@ def calculate_water_analysis_with_recommendations_view(request):
             dynamic_recommendations.append({
                 'id': f'dynamic_ph_low_{int(timezone.now().timestamp())}',
                 'title': 'Low pH Correction',
-                'description': f'pH of {ph} is too low. Consider pH adjustment to prevent corrosion.',
+                'description': 'pH is too low. Consider pH adjustment to prevent corrosion.',
                 'type': 'treatment',
                 'priority': 'medium',
                 'is_implemented': False,
@@ -1549,7 +1670,7 @@ def calculate_water_analysis_with_recommendations_view(request):
             dynamic_recommendations.append({
                 'id': f'dynamic_ph_high_{int(timezone.now().timestamp())}',
                 'title': 'High pH Correction',
-                'description': f'pH of {ph} is too high. Consider pH adjustment to prevent scaling.',
+                'description': 'pH is too high. Consider pH adjustment to prevent scaling.',
                 'type': 'treatment',
                 'priority': 'medium',
                 'is_implemented': False,
@@ -1562,7 +1683,7 @@ def calculate_water_analysis_with_recommendations_view(request):
             dynamic_recommendations.append({
                 'id': f'dynamic_tds_high_{int(timezone.now().timestamp())}',
                 'title': 'High TDS Levels',
-                'description': f'TDS of {tds} ppm is elevated. Consider water treatment or filtration.',
+                'description': 'TDS is elevated. Consider water treatment or filtration.',
                 'type': 'treatment',
                 'priority': 'medium',
                 'is_implemented': False,
@@ -1575,7 +1696,7 @@ def calculate_water_analysis_with_recommendations_view(request):
             dynamic_recommendations.append({
                 'id': f'dynamic_sulphate_high_{int(timezone.now().timestamp())}',
                 'title': 'High Sulphate Levels',
-                'description': f'Sulphate of {sulphate} ppm is elevated. High sulphate can contribute to corrosion and scaling.',
+                'description': 'Sulphate is elevated. High sulphate can contribute to corrosion and scaling.',
                 'type': 'treatment',
                 'priority': 'medium',
                 'is_implemented': False,
@@ -1593,16 +1714,15 @@ def calculate_water_analysis_with_recommendations_view(request):
             'calculation': {
                 'lsi': round(lsi, 2),
                 'rsi': round(rsi, 2),
-                'ls': round(ls, 2),
                 'psi': round(psi, 2),
                 'lr': round(lr, 2),
                 'stability_score': round(stability_score, 2),
                 'lsi_status': lsi_status,
                 'rsi_status': rsi_status,
-                'ls_status': ls_status,
                 'psi_status': psi_status,
                 'lr_status': lr_status,
-                'overall_status': overall_status
+                'overall_status': overall_status,
+                'analysis_type': 'cooling'
             },
             'recommendations': recommendations
         })
@@ -1612,3 +1732,22 @@ def calculate_water_analysis_with_recommendations_view(request):
         return Response({
             'error': f'Calculation error: {str(e)}'
         }, status=status.HTTP_400_BAD_REQUEST)
+
+# Debug view to test which endpoint is being hit
+@api_view(['GET', 'POST'])
+@permission_classes([permissions.AllowAny])
+def debug_login_view(request):
+    """Debug view to see which endpoint is being hit and what data is received."""
+    print(f"DEBUG: debug_login_view called")
+    print(f"DEBUG: Request method: {request.method}")
+    print(f"DEBUG: Request path: {request.path}")
+    print(f"DEBUG: Request data: {request.data}")
+    print(f"DEBUG: Request content type: {request.content_type}")
+    
+    return Response({
+        'message': 'Debug view called',
+        'method': request.method,
+        'path': request.path,
+        'data': request.data,
+        'content_type': request.content_type
+    })

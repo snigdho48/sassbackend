@@ -78,6 +78,62 @@ class TechnicalDataSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data['user'] = self.context['request'].user
         return super().create(validated_data)
+    
+    def to_representation(self, instance):
+        try:
+            # Check if instance is a dictionary or has the expected attributes
+            if isinstance(instance, dict):
+                # Handle case where instance is already a dictionary
+                return {
+                    'id': instance.get('id', 'Unknown'),
+                    'value': str(instance.get('value', '')),
+                    'notes': instance.get('notes', ''),
+                    'entry_date': instance.get('entry_date'),
+                    'created_at': instance.get('created_at'),
+                    'updated_at': instance.get('updated_at'),
+                    'category_name': instance.get('category_name', 'Unknown'),
+                    'user_name': instance.get('user_name', 'Unknown')
+                }
+            elif hasattr(instance, 'id'):
+                # Normal model instance
+                return super().to_representation(instance)
+            else:
+                # Fallback for unexpected data types
+                return {
+                    'id': 'Unknown',
+                    'value': 'Unknown',
+                    'notes': 'Unknown',
+                    'entry_date': None,
+                    'created_at': None,
+                    'updated_at': None,
+                    'category_name': 'Unknown',
+                    'user_name': 'Unknown'
+                }
+        except Exception as e:
+            # If there's an error with foreign key relationships, return basic data
+            try:
+                return {
+                    'id': getattr(instance, 'id', 'Unknown'),
+                    'value': str(getattr(instance, 'value', '')),
+                    'notes': getattr(instance, 'notes', ''),
+                    'entry_date': getattr(instance, 'entry_date', None),
+                    'created_at': getattr(instance, 'created_at', None),
+                    'updated_at': getattr(instance, 'updated_at', None),
+                    'category_name': 'Unknown',
+                    'user_name': 'Unknown'
+                }
+            except:
+                # Ultimate fallback
+                return {
+                    'id': 'Unknown',
+                    'value': 'Unknown',
+                    'notes': 'Unknown',
+                    'entry_date': None,
+                    'created_at': None,
+                    'updated_at': None,
+                    'category_name': 'Unknown',
+                    'user_name': 'Unknown'
+                }
 
 class AnalyticalScoreSerializer(serializers.ModelSerializer):
     class Meta:

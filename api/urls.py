@@ -44,5 +44,8 @@ urlpatterns = [
     path('calculate-water-analysis/', views.calculate_water_analysis_view, name='calculate_water_analysis'),
     path('calculate-water-analysis-with-recommendations/', views.calculate_water_analysis_with_recommendations_view, name='calculate_water_analysis_with_recommendations'),
     
+    # Debug endpoint
+    path('debug-login/', views.debug_login_view, name='debug_login'),
+    
     # Custom Swagger UI
 ] 
