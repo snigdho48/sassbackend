@@ -1,5 +1,5 @@
 from rest_framework import status, generics, permissions, viewsets
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -778,7 +778,13 @@ class PlantViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        return Plant.objects.filter(is_active=True)
+        user = self.request.user
+        if user.is_admin:
+            # Admins can see all active plants
+            return Plant.objects.filter(is_active=True)
+        else:
+            # Regular users can only see plants they own
+            return Plant.objects.filter(is_active=True, owner=user)
     
     def get_serializer_class(self):
         """Use lightweight serializer for list, full serializer for detail"""
@@ -833,8 +839,35 @@ class PlantManagementViewSet(viewsets.ModelViewSet):
     serializer_class = PlantDetailSerializer
     permission_classes = [permissions.IsAuthenticated]
     
+    @swagger_auto_schema(
+        operation_description="Get all users for plant owner assignment (admin only)",
+        responses={
+            200: UserSerializer(many=True),
+            401: openapi.Response(description="Authentication required"),
+            403: openapi.Response(description="Admin access required")
+        }
+    )
+    @action(detail=False, methods=['get'])
+    def users(self, request):
+        """Get all users for plant owner assignment (admin only)"""
+        if not request.user.is_admin:
+            return Response(
+                {'error': 'Admin access required'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        users = CustomUser.objects.filter(is_active=True).order_by('first_name', 'last_name')
+        serializer = UserSerializer(users, many=True)
+        return Response(serializer.data)
+    
     def get_queryset(self):
-        return Plant.objects.all()  # Include all plants (active and inactive)
+        user = self.request.user
+        if user.is_admin:
+            # Admins can see all plants (active and inactive)
+            return Plant.objects.all()
+        else:
+            # Regular users can only see plants they own
+            return Plant.objects.filter(owner=user)
     
     @swagger_auto_schema(
         operation_description="List all plants for management table with full data",
@@ -884,6 +917,48 @@ class PlantManagementViewSet(viewsets.ModelViewSet):
             'previous': page.has_previous() and request.build_absolute_uri(f"?page={page.previous_page_number()}&search={search}&page_size={page_size}") or None,
             'results': serializer.data
         })
+
+    def update(self, request, *args, **kwargs):
+        """Update plant - admins can update any plant, clients can only update plants they own"""
+        instance = self.get_object()
+        user = request.user
+        
+        # Check permissions
+        if not user.is_admin and instance.owner != user:
+            return Response(
+                {'error': 'You can only update plants you own'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # For non-admin users, set owner to current user
+        if not user.is_admin:
+            request.data['owner_id'] = user.id
+        
+        return super().update(request, *args, **kwargs)
+
+    def create(self, request, *args, **kwargs):
+        """Create plant - admins can create plants for any user, clients create plants for themselves"""
+        user = request.user
+        
+        # For non-admin users, set owner to current user
+        if not user.is_admin:
+            request.data['owner_id'] = user.id
+        
+        return super().create(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        """Delete plant - admins can delete any plant, clients can only delete plants they own"""
+        instance = self.get_object()
+        user = request.user
+        
+        # Check permissions
+        if not user.is_admin and instance.owner != user:
+            return Response(
+                {'error': 'You can only delete plants you own'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        return super().destroy(request, *args, **kwargs)
 
 # Water Analysis Views
 class WaterAnalysisViewSet(viewsets.ModelViewSet):

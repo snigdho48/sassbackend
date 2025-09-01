@@ -54,6 +54,8 @@ class Plant(models.Model):
     """Plant model to store plant-specific parameters and ranges for water analysis."""
     name = models.CharField(max_length=100, unique=True)
     is_active = models.BooleanField(default=True)
+    # User who owns/responsible for this plant
+    owner = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='owned_plants')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

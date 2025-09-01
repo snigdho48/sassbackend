@@ -235,6 +235,14 @@ class PlantListSerializer(serializers.ModelSerializer):
 
 class PlantDetailSerializer(serializers.ModelSerializer):
     """Full serializer for plant details - includes all parameters"""
+    owner = UserSerializer(read_only=True)
+    owner_id = serializers.PrimaryKeyRelatedField(
+        write_only=True, 
+        queryset=CustomUser.objects.all(),
+        required=True,
+        source='owner'
+    )
+    
     class Meta:
         model = Plant
         fields = '__all__'
