@@ -787,30 +787,20 @@ class PlantViewSet(viewsets.ModelViewSet):
         return PlantDetailSerializer
     
     @swagger_auto_schema(
-        operation_description="List all active plants (lightweight - id and name only) with search and pagination",
+        operation_description="List all active plants (lightweight - id and name only) with optional search",
         manual_parameters=[
             openapi.Parameter('search', openapi.IN_QUERY, description="Search plants by name", type=openapi.TYPE_STRING),
-            openapi.Parameter('page', openapi.IN_QUERY, description="Page number", type=openapi.TYPE_INTEGER),
-            openapi.Parameter('page_size', openapi.IN_QUERY, description="Items per page (max 100)", type=openapi.TYPE_INTEGER),
         ],
         responses={
             200: openapi.Response('Plants list', openapi.Schema(
-                type=openapi.TYPE_OBJECT,
-                properties={
-                    'count': openapi.Schema(type=openapi.TYPE_INTEGER),
-                    'next': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
-                    'previous': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
-                    'results': openapi.Schema(
-                        type=openapi.TYPE_ARRAY,
-                        items=openapi.Schema(
-                            type=openapi.TYPE_OBJECT,
-                            properties={
-                                'id': openapi.Schema(type=openapi.TYPE_INTEGER),
-                                'name': openapi.Schema(type=openapi.TYPE_STRING)
-                            }
-                        )
-                    )
-                }
+                type=openapi.TYPE_ARRAY,
+                items=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                        'name': openapi.Schema(type=openapi.TYPE_STRING)
+                    }
+                )
             )),
             401: openapi.Response(description="Authentication required")
         }
@@ -822,24 +812,9 @@ class PlantViewSet(viewsets.ModelViewSet):
         
         if search:
             queryset = queryset.filter(name__icontains=search)
-        
-        # Add pagination
-        page_size = min(int(request.query_params.get('page_size', 50)), 100)
-        paginator = Paginator(queryset, page_size)
-        page_number = request.query_params.get('page', 1)
-        
-        try:
-            page = paginator.page(page_number)
-        except (EmptyPage, InvalidPage):
-            page = paginator.page(1)
-        
-        serializer = self.get_serializer(page, many=True)
-        return Response({
-            'count': paginator.count,
-            'next': page.has_next() and request.build_absolute_uri(f"?page={page.next_page_number()}&search={search}&page_size={page_size}") or None,
-            'previous': page.has_previous() and request.build_absolute_uri(f"?page={page.previous_page_number()}&search={search}&page_size={page_size}") or None,
-            'results': serializer.data
-        })
+        # Return full list (no pagination)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
     
     @swagger_auto_schema(
         operation_description="Get detailed plant information with all parameters",
