@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from users.models import CustomUser
-from data_entry.models import DataCategory, TechnicalData, AnalyticalScore, WaterAnalysis, WaterTrend, WaterRecommendation
+from data_entry.models import DataCategory, TechnicalData, AnalyticalScore, WaterAnalysis, WaterTrend, WaterRecommendation, Plant
 from reports.models import ReportTemplate, GeneratedReport
 from dashboard.models import DashboardWidget, UserPreference
 
@@ -226,6 +226,18 @@ class WaterTrendSerializer(serializers.ModelSerializer):
         fields = ['id', 'parameter', 'value', 'trend_date', 'created_at']
         read_only_fields = ['id', 'created_at']
 
+
+class PlantListSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for plant list - only basic info for dropdown"""
+    class Meta:
+        model = Plant
+        fields = ['id', 'name']
+
+class PlantDetailSerializer(serializers.ModelSerializer):
+    """Full serializer for plant details - includes all parameters"""
+    class Meta:
+        model = Plant
+        fields = '__all__'
 
 class WaterRecommendationSerializer(serializers.ModelSerializer):
     class Meta:

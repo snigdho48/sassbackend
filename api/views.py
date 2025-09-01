@@ -10,6 +10,7 @@ from django.utils import timezone
 from datetime import timedelta
 import json
 import math
+from django.core.paginator import Paginator, EmptyPage, InvalidPage
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from django.shortcuts import render
@@ -20,10 +21,11 @@ from .serializers import (
     ChangePasswordSerializer, DataCategorySerializer, TechnicalDataSerializer,
     AnalyticalScoreSerializer, ReportTemplateSerializer, GeneratedReportSerializer,
     DashboardDataSerializer, AnalyticsSerializer, TokenRefreshSerializer,
-    WaterAnalysisSerializer, WaterTrendSerializer, WaterRecommendationSerializer
+    WaterAnalysisSerializer, WaterTrendSerializer, WaterRecommendationSerializer, 
+    PlantListSerializer, PlantDetailSerializer
 )
 from users.models import CustomUser
-from data_entry.models import DataCategory, TechnicalData, AnalyticalScore, WaterAnalysis, WaterTrend, WaterRecommendation
+from data_entry.models import DataCategory, TechnicalData, AnalyticalScore, WaterAnalysis, WaterTrend, WaterRecommendation, Plant
 from reports.models import ReportTemplate, GeneratedReport
 from dashboard.models import DashboardWidget, UserPreference
 from .models import APIUsage
@@ -770,6 +772,144 @@ def custom_swagger_ui(request):
     })
 
 
+# Plant Views
+class PlantViewSet(viewsets.ModelViewSet):
+    """ViewSet for plants with optimized list/detail serializers."""
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return Plant.objects.filter(is_active=True)
+    
+    def get_serializer_class(self):
+        """Use lightweight serializer for list, full serializer for detail"""
+        if self.action == 'list':
+            return PlantListSerializer
+        return PlantDetailSerializer
+    
+    @swagger_auto_schema(
+        operation_description="List all active plants (lightweight - id and name only) with search and pagination",
+        manual_parameters=[
+            openapi.Parameter('search', openapi.IN_QUERY, description="Search plants by name", type=openapi.TYPE_STRING),
+            openapi.Parameter('page', openapi.IN_QUERY, description="Page number", type=openapi.TYPE_INTEGER),
+            openapi.Parameter('page_size', openapi.IN_QUERY, description="Items per page (max 100)", type=openapi.TYPE_INTEGER),
+        ],
+        responses={
+            200: openapi.Response('Plants list', openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'count': openapi.Schema(type=openapi.TYPE_INTEGER),
+                    'next': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
+                    'previous': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
+                    'results': openapi.Schema(
+                        type=openapi.TYPE_ARRAY,
+                        items=openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                'id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                'name': openapi.Schema(type=openapi.TYPE_STRING)
+                            }
+                        )
+                    )
+                }
+            )),
+            401: openapi.Response(description="Authentication required")
+        }
+    )
+    def list(self, request, *args, **kwargs):
+        # Add search functionality
+        search = request.query_params.get('search', '')
+        queryset = self.get_queryset()
+        
+        if search:
+            queryset = queryset.filter(name__icontains=search)
+        
+        # Add pagination
+        page_size = min(int(request.query_params.get('page_size', 50)), 100)
+        paginator = Paginator(queryset, page_size)
+        page_number = request.query_params.get('page', 1)
+        
+        try:
+            page = paginator.page(page_number)
+        except (EmptyPage, InvalidPage):
+            page = paginator.page(1)
+        
+        serializer = self.get_serializer(page, many=True)
+        return Response({
+            'count': paginator.count,
+            'next': page.has_next() and request.build_absolute_uri(f"?page={page.next_page_number()}&search={search}&page_size={page_size}") or None,
+            'previous': page.has_previous() and request.build_absolute_uri(f"?page={page.previous_page_number()}&search={search}&page_size={page_size}") or None,
+            'results': serializer.data
+        })
+    
+    @swagger_auto_schema(
+        operation_description="Get detailed plant information with all parameters",
+        responses={
+            200: openapi.Response('Plant details', openapi.Schema(type=openapi.TYPE_OBJECT)),
+            401: openapi.Response(description="Authentication required"),
+            404: openapi.Response(description="Plant not found")
+        }
+    )
+    def retrieve(self, request, *args, **kwargs):
+        return super().retrieve(request, *args, **kwargs)
+
+
+class PlantManagementViewSet(viewsets.ModelViewSet):
+    """ViewSet for plant management table with full plant data."""
+    serializer_class = PlantDetailSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        return Plant.objects.all()  # Include all plants (active and inactive)
+    
+    @swagger_auto_schema(
+        operation_description="List all plants for management table with full data",
+        manual_parameters=[
+            openapi.Parameter('search', openapi.IN_QUERY, description="Search plants by name", type=openapi.TYPE_STRING),
+            openapi.Parameter('page', openapi.IN_QUERY, description="Page number", type=openapi.TYPE_INTEGER),
+            openapi.Parameter('page_size', openapi.IN_QUERY, description="Items per page (max 100)", type=openapi.TYPE_INTEGER),
+        ],
+        responses={
+            200: openapi.Response('Plants management list', openapi.Schema(
+                type=openapi.TYPE_OBJECT,
+                properties={
+                    'count': openapi.Schema(type=openapi.TYPE_INTEGER),
+                    'next': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
+                    'previous': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
+                    'results': openapi.Schema(
+                        type=openapi.TYPE_ARRAY,
+                        items=openapi.Schema(type=openapi.TYPE_OBJECT)
+                    )
+                }
+            )),
+            401: openapi.Response(description="Authentication required")
+        }
+    )
+    def list(self, request, *args, **kwargs):
+        # Add search functionality
+        search = request.query_params.get('search', '')
+        queryset = self.get_queryset()
+        
+        if search:
+            queryset = queryset.filter(name__icontains=search)
+        
+        # Add pagination
+        page_size = min(int(request.query_params.get('page_size', 10)), 100)
+        paginator = Paginator(queryset, page_size)
+        page_number = request.query_params.get('page', 1)
+        
+        try:
+            page = paginator.page(page_number)
+        except (EmptyPage, InvalidPage):
+            page = paginator.page(1)
+        
+        serializer = self.get_serializer(page, many=True)
+        return Response({
+            'count': paginator.count,
+            'next': page.has_next() and request.build_absolute_uri(f"?page={page.next_page_number()}&search={search}&page_size={page_size}") or None,
+            'previous': page.has_previous() and request.build_absolute_uri(f"?page={page.previous_page_number()}&search={search}&page_size={page_size}") or None,
+            'results': serializer.data
+        })
+
 # Water Analysis Views
 class WaterAnalysisViewSet(viewsets.ModelViewSet):
     """ViewSet for water analysis."""
@@ -802,12 +942,16 @@ class WaterAnalysisViewSet(viewsets.ModelViewSet):
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
+                'analysis_type': openapi.Schema(type=openapi.TYPE_STRING, description='Analysis type: cooling or boiler'),
                 'ph': openapi.Schema(type=openapi.TYPE_NUMBER, description='pH value'),
                 'tds': openapi.Schema(type=openapi.TYPE_NUMBER, description='Total Dissolved Solids (ppm)'),
-                'total_alkalinity': openapi.Schema(type=openapi.TYPE_NUMBER, description='Total Alkalinity as CaCO₃ (ppm)'),
                 'hardness': openapi.Schema(type=openapi.TYPE_NUMBER, description='Hardness as CaCO₃ (ppm)'),
+                'total_alkalinity': openapi.Schema(type=openapi.TYPE_NUMBER, description='Total Alkalinity as CaCO₃ (ppm)'),
                 'chloride': openapi.Schema(type=openapi.TYPE_NUMBER, description='Chloride as NaCl (ppm)'),
                 'temperature': openapi.Schema(type=openapi.TYPE_NUMBER, description='Hot Side Temperature (°C)'),
+                'basin_temperature': openapi.Schema(type=openapi.TYPE_NUMBER, description='Basin Temperature (°C)'),
+                'sulphate': openapi.Schema(type=openapi.TYPE_NUMBER, description='Sulphate (ppm)'),
+                'm_alkalinity': openapi.Schema(type=openapi.TYPE_NUMBER, description='M-Alkalinity as CaCO₃ (ppm)'),
                 'analysis_name': openapi.Schema(type=openapi.TYPE_STRING, description='Analysis name'),
                 'notes': openapi.Schema(type=openapi.TYPE_STRING, description='Additional notes'),
             }
@@ -855,7 +999,8 @@ def water_trends_view(request):
             'ph': 7.2,
             'lsi': -0.1,
             'rsi': 6.8,
-            'ls': 0.2
+            'psi': 6.8,
+            'lr': 0.2
         }
         
         for i in range(min(days, 30)):
@@ -899,10 +1044,17 @@ def get_trend_status(parameter, value):
             return 'scaling'
         else:
             return 'corrosion'
-    elif parameter == 'ls':
-        if value < 0.2:
+    elif parameter == 'psi':
+        if 4.5 <= value <= 6.5:
+            return 'optimal'
+        elif value < 4.5:
+            return 'scaling'
+        else:
+            return 'corrosion'
+    elif parameter == 'lr':
+        if value <= 0.8:
             return 'acceptable'
-        elif value < 0.8:
+        elif value <= 1.2:
             return 'moderate'
         else:
             return 'corrosion'
@@ -1140,6 +1292,15 @@ def calculate_water_analysis_with_recommendations_view(request):
     try:
         # Extract parameters from request and convert to float
         analysis_type = request.data.get('analysis_type', 'cooling')  # 'cooling' or 'boiler'
+        plant_id = request.data.get('plant_id')
+        
+        # Get plant-specific parameters if plant_id is provided
+        plant = None
+        if plant_id:
+            try:
+                plant = Plant.objects.get(id=plant_id, is_active=True)
+            except Plant.DoesNotExist:
+                return Response({'error': 'Plant not found'}, status=status.HTTP_404_NOT_FOUND)
         
         # Check analysis type and extract only required parameters
         if analysis_type == 'boiler':
@@ -1164,53 +1325,70 @@ def calculate_water_analysis_with_recommendations_view(request):
             # Start score: 100 points
             stability_score = 100
             
-            # pH: Ideal Range 10.5–11.5 (as per your image)
-            if 10.5 <= ph <= 11.5:
+            # Get plant-specific parameters or use defaults
+            if plant:
+                boiler_params = plant.get_boiler_parameters()
+                ph_min = float(boiler_params['ph']['min'])
+                ph_max = float(boiler_params['ph']['max'])
+                tds_min = float(boiler_params['tds']['min'])
+                tds_max = float(boiler_params['tds']['max'])
+                hardness_max = float(boiler_params['hardness']['max'])
+                alk_min = float(boiler_params['alkalinity']['min'])
+                alk_max = float(boiler_params['alkalinity']['max'])
+            else:
+                # Default values
+                ph_min, ph_max = 10.5, 11.5
+                tds_min, tds_max = 2500, 3500
+                hardness_max = 2.0
+                alk_min, alk_max = 600, 1400
+            
+            # pH: Ideal Range based on plant parameters
+            if ph_min <= ph <= ph_max:
                 # pH is in ideal range, no deduction
                 pass
             else:
                 # Calculate deviation and deduct points (5 points per 0.1 deviation)
-                if ph < 10.5:
-                    deviation = 10.5 - ph
+                if ph < ph_min:
+                    deviation = ph_min - ph
                 else:
-                    deviation = ph - 11.5
+                    deviation = ph - ph_max
                 points_to_deduct = min((deviation / 0.1) * 5, 30)  # Cap at 30 points
                 stability_score -= points_to_deduct
                 print(f"pH deviation: {deviation}, points deducted: {points_to_deduct}, score after: {stability_score}")
             
-            # TDS: Ideal Range 2500–3500 ppm (as per your image)
-            if 2500 <= tds <= 3500:
+            # TDS: Ideal Range based on plant parameters
+            if tds_min <= tds <= tds_max:
                 # TDS is in ideal range, no deduction
                 pass
             else:
-                if tds > 4000:
-                    stability_score -= 20  # Subtract 20 points if > 4000 ppm
-                    print(f"TDS > 4000: points deducted: 20, score after: {stability_score}")
+                if tds > tds_max * 1.15:  # 15% above max
+                    stability_score -= 20  # Subtract 20 points if > 15% above max
+                    print(f"TDS > {tds_max * 1.15}: points deducted: 20, score after: {stability_score}")
                 else:
                     stability_score -= 10  # Subtract 10 points if outside ideal range
                     print(f"TDS outside ideal range: points deducted: 10, score after: {stability_score}")
             
-            # Hardness: Ideal Range ≤ 2 ppm (as per your image)
-            if hardness <= 2:
+            # Hardness: Ideal Range based on plant parameters
+            if hardness <= hardness_max:
                 # Hardness is in ideal range, no deduction
                 pass
-            elif 3 <= hardness <= 5:
-                stability_score -= 10  # Subtract 10 points if 3–5 ppm
-                print(f"Hardness 3-5 ppm: points deducted: 10, score after: {stability_score}")
+            elif hardness <= hardness_max * 2.5:  # 2.5x max
+                stability_score -= 10  # Subtract 10 points if 2.5x max
+                print(f"Hardness {hardness_max}-{hardness_max * 2.5}: points deducted: 10, score after: {stability_score}")
             else:
-                stability_score -= 20  # Subtract 20 points if > 5 ppm
-                print(f"Hardness > 5 ppm: points deducted: 20, score after: {stability_score}")
+                stability_score -= 20  # Subtract 20 points if > 2.5x max
+                print(f"Hardness > {hardness_max * 2.5}: points deducted: 20, score after: {stability_score}")
             
-            # M-Alk: Ideal Range 250–600 ppm (as per your image)
-            if 250 <= m_alkalinity <= 600:
+            # M-Alk: Ideal Range based on plant parameters
+            if alk_min <= m_alkalinity <= alk_max:
                 # M-Alk is in ideal range, no deduction
                 pass
             else:
                 # Calculate deviation from ideal range and deduct points
-                if m_alkalinity < 250:
-                    deviation = 250 - m_alkalinity
+                if m_alkalinity < alk_min:
+                    deviation = alk_min - m_alkalinity
                 else:
-                    deviation = m_alkalinity - 600
+                    deviation = m_alkalinity - alk_max
                 points_to_deduct = (deviation / 50) * 2
                 stability_score -= points_to_deduct
                 print(f"M-Alk deviation: {deviation}, points deducted: {points_to_deduct}, score after: {stability_score}")
@@ -1235,9 +1413,9 @@ def calculate_water_analysis_with_recommendations_view(request):
                 {
                     'id': 'boiler_ph_1',
                     'title': 'pH Adjustment',
-                    'description': 'pH too low — corrosion risk. Adjust chemical feed to raise pH.' if ph < 11.0 else 'pH too high — risk of caustic embrittlement. Reduce chemical feed.' if ph > 12.0 else 'pH is within optimal range.',
+                    'description': f'pH too low — corrosion risk. Adjust chemical feed to raise pH to {ph_min}-{ph_max} range.' if ph < ph_min else f'pH too high — risk of caustic embrittlement. Reduce chemical feed to {ph_min}-{ph_max} range.' if ph > ph_max else f'pH is within optimal range ({ph_min}-{ph_max}).',
                     'type': 'chemical_adjustment',
-                    'priority': 'high' if ph < 11.0 or ph > 12.0 else 'low',
+                    'priority': 'high' if ph < ph_min or ph > ph_max else 'low',
                     'is_implemented': False,
                     'created_at': timezone.now().isoformat(),
                     'source': 'boiler_table'
@@ -1245,9 +1423,9 @@ def calculate_water_analysis_with_recommendations_view(request):
                 {
                     'id': 'boiler_tds_1',
                     'title': 'TDS Management',
-                    'description': 'TDS too high — risk of carryover and foaming. Increase blowdown.' if tds > 3500 else 'TDS is within optimal range.',
+                    'description': f'TDS too high — risk of carryover and foaming. Increase blowdown to maintain {tds_min}-{tds_max} ppm range.' if tds > tds_max else f'TDS is within optimal range ({tds_min}-{tds_max} ppm).',
                     'type': 'blowdown_optimization',
-                    'priority': 'medium' if tds > 3500 else 'low',
+                    'priority': 'medium' if tds > tds_max else 'low',
                     'is_implemented': False,
                     'created_at': timezone.now().isoformat(),
                     'source': 'boiler_table'
@@ -1255,9 +1433,9 @@ def calculate_water_analysis_with_recommendations_view(request):
                 {
                     'id': 'boiler_hardness_1',
                     'title': 'Hardness Control',
-                    'description': 'Hardness detected — risk of scaling. Check softener and condensate contamination.' if hardness >= 5 else 'Hardness is within optimal range.',
+                    'description': f'Hardness detected — risk of scaling. Check softener and condensate contamination. Target: ≤{hardness_max} ppm.' if hardness > hardness_max else f'Hardness is within optimal range (≤{hardness_max} ppm).',
                     'type': 'water_treatment',
-                    'priority': 'high' if hardness >= 5 else 'low',
+                    'priority': 'high' if hardness > hardness_max else 'low',
                     'is_implemented': False,
                     'created_at': timezone.now().isoformat(),
                     'source': 'boiler_table'
@@ -1265,9 +1443,9 @@ def calculate_water_analysis_with_recommendations_view(request):
                 {
                     'id': 'boiler_malk_1',
                     'title': 'M-Alkalinity Management',
-                    'description': 'M-Alkalinity too low — may lead to corrosion. Increase alkalinity through dosing.' if m_alkalinity < 600 else 'M-Alkalinity is within optimal range.',
+                    'description': f'M-Alkalinity too low — may lead to corrosion. Increase alkalinity through dosing to {alk_min}-{alk_max} ppm range.' if m_alkalinity < alk_min else f'M-Alkalinity is within optimal range ({alk_min}-{alk_max} ppm).',
                     'type': 'chemical_adjustment',
-                    'priority': 'medium' if m_alkalinity < 600 else 'low',
+                    'priority': 'medium' if m_alkalinity < alk_min else 'low',
                     'is_implemented': False,
                     'created_at': timezone.now().isoformat(),
                     'source': 'boiler_table'
@@ -1279,7 +1457,9 @@ def calculate_water_analysis_with_recommendations_view(request):
                 'calculation': {
                     'stability_score': round(stability_score, 2),
                     'overall_status': overall_status,
-                    'analysis_type': 'boiler'
+                    'analysis_type': 'boiler',
+                    'plant_id': plant_id,
+                    'plant_name': plant.name if plant else None
                 },
                 'recommendations': boiler_recommendations
             })

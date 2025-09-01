@@ -39,22 +39,30 @@ class DataCalculationAdmin(admin.ModelAdmin):
 
 @admin.register(WaterAnalysis)
 class WaterAnalysisAdmin(admin.ModelAdmin):
-    list_display = ('user', 'analysis_name', 'analysis_date', 'ph', 'lsi', 'rsi', 'ls', 'stability_score', 'overall_status')
-    list_filter = ('overall_status', 'analysis_date', 'user', 'lsi_status', 'rsi_status', 'ls_status')
+    list_display = ('user', 'analysis_name', 'analysis_type', 'analysis_date', 'ph', 'lsi', 'rsi', 'psi', 'lr', 'stability_score', 'overall_status')
+    list_filter = ('analysis_type', 'overall_status', 'analysis_date', 'user', 'lsi_status', 'rsi_status', 'psi_status', 'lr_status')
     search_fields = ('user__email', 'analysis_name', 'notes')
     date_hierarchy = 'analysis_date'
     ordering = ('-analysis_date', '-created_at')
-    readonly_fields = ('lsi', 'rsi', 'ls', 'stability_score', 'lsi_status', 'rsi_status', 'ls_status', 'overall_status')
+    readonly_fields = ('lsi', 'rsi', 'psi', 'lr', 'stability_score', 'lsi_status', 'rsi_status', 'psi_status', 'lr_status', 'overall_status')
     
     fieldsets = (
         (None, {
-            'fields': ('user', 'analysis_name', 'analysis_date', 'notes')
+            'fields': ('user', 'analysis_name', 'analysis_type', 'analysis_date', 'notes')
         }),
-        ('Water Parameters', {
-            'fields': ('ph', 'tds', 'total_alkalinity', 'hardness', 'chloride', 'temperature')
+        ('Water Parameters - Common', {
+            'fields': ('ph', 'tds', 'hardness')
+        }),
+        ('Cooling Water Parameters', {
+            'fields': ('total_alkalinity', 'chloride', 'temperature', 'basin_temperature', 'sulphate'),
+            'classes': ('collapse',)
+        }),
+        ('Boiler Water Parameters', {
+            'fields': ('m_alkalinity',),
+            'classes': ('collapse',)
         }),
         ('Calculated Results', {
-            'fields': ('lsi', 'rsi', 'ls', 'stability_score', 'lsi_status', 'rsi_status', 'ls_status', 'overall_status'),
+            'fields': ('lsi', 'rsi', 'psi', 'lr', 'stability_score', 'lsi_status', 'rsi_status', 'psi_status', 'lr_status', 'overall_status'),
             'classes': ('collapse',)
         }),
     )

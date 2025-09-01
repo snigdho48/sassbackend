@@ -24,18 +24,26 @@ class AnalyticalScoreSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class PlantSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Plant
+        fields = '__all__'
+
 class WaterAnalysisSerializer(serializers.ModelSerializer):
+    plant_name = serializers.CharField(source='plant.name', read_only=True)
+    
     class Meta:
         model = WaterAnalysis
         fields = [
-            'id', 'analysis_name', 'analysis_date', 'ph', 'tds', 'total_alkalinity', 
-            'hardness', 'chloride', 'temperature', 'lsi', 'rsi', 'ls', 'stability_score',
-            'lsi_status', 'rsi_status', 'ls_status', 'overall_status', 'notes', 
+            'id', 'plant', 'plant_name', 'analysis_name', 'analysis_type', 'analysis_date', 'ph', 'tds', 'hardness',
+            'total_alkalinity', 'chloride', 'temperature', 'basin_temperature', 'sulphate',
+            'm_alkalinity', 'lsi', 'rsi', 'psi', 'lr', 'stability_score',
+            'lsi_status', 'rsi_status', 'psi_status', 'lr_status', 'overall_status', 'notes', 
             'created_at', 'updated_at'
         ]
         read_only_fields = [
-            'id', 'lsi', 'rsi', 'ls', 'stability_score', 'lsi_status', 'rsi_status', 
-            'ls_status', 'overall_status', 'created_at', 'updated_at'
+            'id', 'lsi', 'rsi', 'psi', 'lr', 'stability_score', 'lsi_status', 'rsi_status', 
+            'psi_status', 'lr_status', 'overall_status', 'created_at', 'updated_at'
         ]
 
 

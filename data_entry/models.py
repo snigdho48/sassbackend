@@ -50,31 +50,98 @@ class TechnicalData(models.Model):
             raise ValidationError(f"Value must be at most {self.category.max_value}")
 
 
+class Plant(models.Model):
+    """Plant model to store plant-specific parameters and ranges for water analysis."""
+    name = models.CharField(max_length=100, unique=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    # Plant-specific parameter ranges for cooling water
+    cooling_ph_min = models.DecimalField(max_digits=4, decimal_places=2, default=6.5)
+    cooling_ph_max = models.DecimalField(max_digits=4, decimal_places=2, default=7.8)
+    cooling_tds_min = models.DecimalField(max_digits=6, decimal_places=2, default=500)
+    cooling_tds_max = models.DecimalField(max_digits=6, decimal_places=2, default=800)
+    cooling_hardness_max = models.DecimalField(max_digits=6, decimal_places=2, default=300)
+    cooling_alkalinity_max = models.DecimalField(max_digits=6, decimal_places=2, default=300)
+    cooling_chloride_max = models.DecimalField(max_digits=6, decimal_places=2, default=250)
+    cooling_cycle_min = models.DecimalField(max_digits=4, decimal_places=1, default=5.0)
+    cooling_cycle_max = models.DecimalField(max_digits=4, decimal_places=1, default=8.0)
+    cooling_iron_max = models.DecimalField(max_digits=4, decimal_places=1, default=3.0)
+    
+    # Plant-specific parameter ranges for boiler water
+    boiler_ph_min = models.DecimalField(max_digits=4, decimal_places=2, default=10.5)
+    boiler_ph_max = models.DecimalField(max_digits=4, decimal_places=2, default=11.5)
+    boiler_tds_min = models.DecimalField(max_digits=6, decimal_places=2, default=2500)
+    boiler_tds_max = models.DecimalField(max_digits=6, decimal_places=2, default=3500)
+    boiler_hardness_max = models.DecimalField(max_digits=4, decimal_places=1, default=2.0)
+    boiler_alkalinity_min = models.DecimalField(max_digits=6, decimal_places=2, default=600)
+    boiler_alkalinity_max = models.DecimalField(max_digits=6, decimal_places=2, default=1400)
+    
+    class Meta:
+        ordering = ['name']
+    
+    def __str__(self):
+        return self.name
+    
+    def get_cooling_parameters(self):
+        """Get cooling water parameters for this plant."""
+        return {
+            'ph': {'min': self.cooling_ph_min, 'max': self.cooling_ph_max},
+            'tds': {'min': self.cooling_tds_min, 'max': self.cooling_tds_max},
+            'hardness': {'max': self.cooling_hardness_max},
+            'alkalinity': {'max': self.cooling_alkalinity_max},
+            'chloride': {'max': self.cooling_chloride_max},
+            'cycle': {'min': self.cooling_cycle_min, 'max': self.cooling_cycle_max},
+            'iron': {'max': self.cooling_iron_max}
+        }
+    
+    def get_boiler_parameters(self):
+        """Get boiler water parameters for this plant."""
+        return {
+            'ph': {'min': self.boiler_ph_min, 'max': self.boiler_ph_max},
+            'tds': {'min': self.boiler_tds_min, 'max': self.boiler_tds_max},
+            'hardness': {'max': self.boiler_hardness_max},
+            'alkalinity': {'min': self.boiler_alkalinity_min, 'max': self.boiler_alkalinity_max}
+        }
+
+
 class WaterAnalysis(models.Model):
     """Water analysis data for stability calculations."""
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='water_analyses')
+    plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name='water_analyses', null=True, blank=True)
     analysis_date = models.DateField(default=timezone.now)
     analysis_name = models.CharField(max_length=100, default="Water Analysis")
+    analysis_type = models.CharField(max_length=20, choices=[('cooling', 'Cooling Water'), ('boiler', 'Boiler Water')], default='cooling')
     
-    # Water Parameters
+    # Water Parameters - Common
     ph = models.DecimalField(max_digits=4, decimal_places=2, validators=[MinValueValidator(0), MaxValueValidator(14)])
     tds = models.DecimalField(max_digits=6, decimal_places=2, help_text="Total Dissolved Solids (ppm)")
-    total_alkalinity = models.DecimalField(max_digits=6, decimal_places=2, help_text="Total Alkalinity as CaCO₃ (ppm)")
     hardness = models.DecimalField(max_digits=6, decimal_places=2, help_text="Hardness as CaCO₃ (ppm)")
-    chloride = models.DecimalField(max_digits=6, decimal_places=2, help_text="Chloride as NaCl (ppm)")
-    temperature = models.DecimalField(max_digits=4, decimal_places=1, help_text="Hot Side Temperature (°C)")
+    
+    # Cooling Water Specific Parameters
+    total_alkalinity = models.DecimalField(max_digits=6, decimal_places=2, help_text="Total Alkalinity as CaCO₃ (ppm)", null=True, blank=True)
+    chloride = models.DecimalField(max_digits=6, decimal_places=2, help_text="Chloride as NaCl (ppm)", null=True, blank=True)
+    temperature = models.DecimalField(max_digits=4, decimal_places=1, help_text="Hot Side Temperature (°C)", null=True, blank=True)
+    basin_temperature = models.DecimalField(max_digits=4, decimal_places=1, help_text="Basin Temperature (°C)", null=True, blank=True)
+    sulphate = models.DecimalField(max_digits=6, decimal_places=2, help_text="Sulphate (ppm)", null=True, blank=True)
+    
+    # Boiler Water Specific Parameters
+    m_alkalinity = models.DecimalField(max_digits=6, decimal_places=2, help_text="M-Alkalinity as CaCO₃ (ppm)", null=True, blank=True)
     
     # Calculated Indices
-    lsi = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
-    rsi = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
-    ls = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+    lsi = models.DecimalField(max_digits=6, decimal_places=3, null=True, blank=True)
+    rsi = models.DecimalField(max_digits=6, decimal_places=3, null=True, blank=True)
+    psi = models.DecimalField(max_digits=6, decimal_places=3, null=True, blank=True)
+    lr = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True)
     stability_score = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     
     # Status fields
-    lsi_status = models.CharField(max_length=20, blank=True)
-    rsi_status = models.CharField(max_length=20, blank=True)
-    ls_status = models.CharField(max_length=20, blank=True)
-    overall_status = models.CharField(max_length=20, blank=True)
+    lsi_status = models.CharField(max_length=100, blank=True)
+    rsi_status = models.CharField(max_length=100, blank=True)
+    psi_status = models.CharField(max_length=100, blank=True)
+    lr_status = models.CharField(max_length=100, blank=True)
+    overall_status = models.CharField(max_length=100, blank=True)
     
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -88,15 +155,33 @@ class WaterAnalysis(models.Model):
         return f"{self.user.email} - {self.analysis_name} ({self.analysis_date})"
     
     def calculate_indices(self):
-        """Calculate LSI, RSI, and LS indices."""
+        """Calculate water stability indices based on analysis type."""
+        try:
+            if self.analysis_type == 'boiler':
+                # For boiler water, only calculate stability score
+                self.stability_score = self._calculate_boiler_stability_score()
+                self.overall_status = self._get_boiler_overall_status()
+            else:
+                # For cooling water, calculate all indices
+                self._calculate_cooling_indices()
+            
+            self.save()
+            return True
+        except Exception as e:
+            print(f"Error calculating indices: {e}")
+            return False
+    
+    def _calculate_cooling_indices(self):
+        """Calculate LSI, RSI, PSI, and LR indices for cooling water."""
         try:
             # Convert Decimal fields to float for calculations
             ph = float(self.ph)
             tds = float(self.tds)
-            total_alkalinity = float(self.total_alkalinity)
+            total_alkalinity = float(self.total_alkalinity) if self.total_alkalinity else 0
             hardness = float(self.hardness)
-            chloride = float(self.chloride)
-            temperature = float(self.temperature)
+            chloride = float(self.chloride) if self.chloride else 0
+            temperature = float(self.temperature) if self.temperature else 25
+            sulphate = float(self.sulphate) if self.sulphate else 0
             
             # Langelier Saturation Index (LSI)
             # LSI = pH - pHs
@@ -113,25 +198,71 @@ class WaterAnalysis(models.Model):
             # RSI = 2 * pHs - pH
             self.rsi = 2 * phs - ph
             
-            # Larson-Skold Index (LS)
-            # LS = (Cl + SO4) / (HCO3)
-            # Simplified version using available parameters
-            self.ls = chloride / total_alkalinity if total_alkalinity > 0 else 0
+            # Puckorius Scaling Index (PSI)
+            # PSI = 2 * pHs - pH
+            self.psi = 2 * phs - ph
+            
+            # Langelier Ratio (LR)
+            # LR = (Cl + SO4) / (HCO3)
+            if total_alkalinity > 0:
+                self.lr = (chloride + sulphate) / total_alkalinity
+            else:
+                self.lr = 0
             
             # Determine status
             self.lsi_status = self._get_lsi_status()
             self.rsi_status = self._get_rsi_status()
-            self.ls_status = self._get_ls_status()
-            self.overall_status = self._get_overall_status()
+            self.psi_status = self._get_psi_status()
+            self.lr_status = self._get_lr_status()
+            self.overall_status = self._get_cooling_overall_status()
             
             # Calculate stability score (0-100)
-            self.stability_score = self._calculate_stability_score()
+            self.stability_score = self._calculate_cooling_stability_score()
             
-            self.save()
-            return True
         except Exception as e:
-            print(f"Error calculating indices: {e}")
-            return False
+            print(f"Error calculating cooling indices: {e}")
+    
+    def _calculate_boiler_stability_score(self):
+        """Calculate stability score for boiler water."""
+        try:
+            ph = float(self.ph)
+            tds = float(self.tds)
+            hardness = float(self.hardness)
+            m_alkalinity = float(self.m_alkalinity) if self.m_alkalinity else 0
+            
+            # Start with 100 points
+            score = 100
+            
+            # pH deduction (ideal range 10.5-11.5)
+            if ph < 10.5 or ph > 11.5:
+                deviation = abs(ph - 11.0)  # deviation from ideal center
+                points_to_deduct = (deviation / 0.1) * 5
+                score -= points_to_deduct
+            
+            # TDS deduction (ideal range 2500-3500)
+            if tds < 2500 or tds > 3500:
+                if tds > 4000:
+                    score -= 20
+                else:
+                    score -= 10
+            
+            # Hardness deduction (ideal ≤ 2)
+            if hardness > 2:
+                if hardness > 5:
+                    score -= 20
+                else:
+                    score -= 10
+            
+            # M-Alkalinity deduction (ideal range 250-600)
+            if m_alkalinity < 250 or m_alkalinity > 600:
+                deviation = abs(m_alkalinity - 425)  # deviation from ideal center
+                points_to_deduct = (deviation / 50) * 2
+                score -= points_to_deduct
+            
+            return max(0, min(100, score))
+        except Exception as e:
+            print(f"Error calculating boiler stability score: {e}")
+            return 0
     
     def _get_lsi_status(self):
         """Get LSI status based on value."""
@@ -151,31 +282,50 @@ class WaterAnalysis(models.Model):
         else:
             return "Stable"
     
-    def _get_ls_status(self):
-        """Get LS status based on value."""
-        if self.ls > 0.8:
-            return "Corrosion Likely"
-        elif self.ls < 0.2:
-            return "Acceptable"
+    def _get_psi_status(self):
+        """Get PSI status based on value."""
+        if self.psi < 4.5:
+            return "Water has a tendency to scale"
+        elif 4.5 <= self.psi <= 6.5:
+            return "Water is in optimal range with no corrosion or scaling"
         else:
-            return "Moderate"
+            return "Water has a tendency to corrode"
     
-    def _get_overall_status(self):
-        """Get overall water stability status."""
+    def _get_lr_status(self):
+        """Get LR status based on value."""
+        if self.lr < 0.8:
+            return "Chlorides and sulfate probably will not interfere with natural film formation"
+        elif 0.8 <= self.lr <= 1.2:
+            return "Chlorides and sulfates may interfere with natural film formation. Higher than desired corrosion rates might be anticipated."
+        else:
+            return "The tendency towards high corrosion rates of a local type should be expected as the index increases"
+    
+    def _get_cooling_overall_status(self):
+        """Get overall water stability status for cooling water."""
         lsi_score = 1 if self.lsi_status == "Stable" else 0
         rsi_score = 1 if self.rsi_status == "Stable" else 0
-        ls_score = 1 if self.ls_status in ["Acceptable", "Moderate"] else 0
+        psi_score = 1 if self.psi_status == "Water is in optimal range with no corrosion or scaling" else 0
+        lr_score = 1 if self.lr_status == "Chlorides and sulfate probably will not interfere with natural film formation" else 0
         
-        total_score = lsi_score + rsi_score + ls_score
-        if total_score >= 2:
+        total_score = lsi_score + rsi_score + psi_score + lr_score
+        if total_score >= 3:
             return "Stable"
-        elif total_score >= 1:
+        elif total_score >= 2:
             return "Moderate"
         else:
             return "Unstable"
     
-    def _calculate_stability_score(self):
-        """Calculate overall stability score (0-100)."""
+    def _get_boiler_overall_status(self):
+        """Get overall water stability status for boiler water."""
+        if self.stability_score >= 70:
+            return "Stable"
+        elif self.stability_score >= 50:
+            return "Moderate"
+        else:
+            return "Unstable"
+    
+    def _calculate_cooling_stability_score(self):
+        """Calculate overall stability score (0-100) for cooling water."""
         base_score = 50
         
         # LSI contribution
@@ -194,12 +344,20 @@ class WaterAnalysis(models.Model):
         elif self.rsi_status == "Corrosion Likely":
             base_score -= 20
         
-        # LS contribution
-        if self.ls_status == "Acceptable":
+        # PSI contribution
+        if self.psi_status == "Water is in optimal range with no corrosion or scaling":
+            base_score += 12
+        elif self.psi_status == "Water has a tendency to scale":
+            base_score -= 6
+        elif self.psi_status == "Water has a tendency to corrode":
+            base_score -= 12
+        
+        # LR contribution
+        if self.lr_status == "Chlorides and sulfate probably will not interfere with natural film formation":
             base_score += 10
-        elif self.ls_status == "Moderate":
+        elif self.lr_status == "Chlorides and sulfates may interfere with natural film formation. Higher than desired corrosion rates might be anticipated.":
             base_score += 5
-        elif self.ls_status == "Corrosion Likely":
+        elif self.lr_status == "The tendency towards high corrosion rates of a local type should be expected as the index increases":
             base_score -= 10
         
         return max(0, min(100, base_score))
@@ -251,12 +409,28 @@ class WaterAnalysis(models.Model):
                 'priority': 'medium'
             })
         
-        # LS-based recommendations
-        if self.ls_status == "Corrosion Likely":
+        # PSI-based recommendations
+        if self.psi_status == "Water has a tendency to scale":
+            recommendations.append({
+                'type': 'scaling',
+                'title': 'Address scaling tendency',
+                'description': 'High PSI indicates scaling potential. Review treatment program.',
+                'priority': 'medium'
+            })
+        elif self.psi_status == "Water has a tendency to corrode":
             recommendations.append({
                 'type': 'corrosion',
-                'title': 'Address chloride-related corrosion',
-                'description': 'High Larson-Skold index indicates chloride corrosion potential.',
+                'title': 'Address corrosion tendency',
+                'description': 'High PSI indicates corrosion potential. Add corrosion inhibitors.',
+                'priority': 'medium'
+            })
+        
+        # LR-based recommendations
+        if self.lr_status == "The tendency towards high corrosion rates of a local type should be expected as the index increases":
+            recommendations.append({
+                'type': 'corrosion',
+                'title': 'Address chloride and sulfate corrosion',
+                'description': 'High Langelier Ratio indicates chloride/sulfate corrosion potential.',
                 'priority': 'high'
             })
         
@@ -412,3 +586,7 @@ def create_default_calculations():
             name=calc_data['name'],
             defaults=calc_data
         )
+
+
+
+
