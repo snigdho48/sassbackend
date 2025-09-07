@@ -15,6 +15,9 @@ class UserSerializer(serializers.ModelSerializer):
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, validators=[validate_password])
     password2 = serializers.CharField(write_only=True)
+    role = serializers.CharField(default='client', required=False)
+    phone = serializers.CharField(required=False, allow_blank=True)
+    company = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = CustomUser
