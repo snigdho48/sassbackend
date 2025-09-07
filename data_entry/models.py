@@ -197,13 +197,21 @@ class WaterAnalysis(models.Model):
             
             # Langelier Saturation Index (LSI)
             # LSI = pH - pHs
-            # pHs = (9.3 + A + B) - (C + D)
-            # Where A, B, C, D are temperature and TDS dependent factors
+            # pHs = 9.3 + A + B - C - D
+            # Where:
+            # A = (Log10(TDS)-1)/10
+            # B = -13.12 x Log10(Hot Side Temp (°C)+273) + 34.55
+            # C = Log10(Hardness CaCO3) - 0.4
+            # D = Log10(Alkaline CaCO3)
             
-            # Simplified LSI calculation
-            temp_factor = 0.1 * (temperature - 25)
-            tds_factor = 0.01 * (tds - 150)
-            phs = 9.3 + temp_factor + tds_factor
+            import math
+            # Calculate A, B, C, D factors
+            A = (math.log10(tds) - 1) / 10 if tds > 0 else 0
+            B = -13.12 * math.log10(temperature + 273) + 34.55 if temperature > 0 else 0
+            C = math.log10(hardness) - 0.4 if hardness > 0 else 0
+            D = math.log10(total_alkalinity) if total_alkalinity > 0 else 0
+            
+            phs = 9.3 + A + B - C - D
             self.lsi = ph - phs
             
             # Ryznar Stability Index (RSI)
@@ -211,8 +219,11 @@ class WaterAnalysis(models.Model):
             self.rsi = 2 * phs - ph
             
             # Puckorius Scaling Index (PSI)
-            # PSI = 2 * pHs - pH
-            self.psi = 2 * phs - ph
+            # PSI = 2 * pHs - pHe
+            # Where pHe = 1.465 + Log10(Alkaline CaCO3) + 4.54
+            import math
+            pHe = 1.465 + math.log10(total_alkalinity) + 4.54 if total_alkalinity > 0 else 0
+            self.psi = 2 * phs - pHe
             
             # Langelier Ratio (LR)
             # LR = (Cl + SO4) / (HCO3)

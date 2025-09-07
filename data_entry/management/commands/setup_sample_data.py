@@ -23,7 +23,7 @@ class Command(BaseCommand):
                 'first_name': 'Admin',
                 'last_name': 'User',
                 'role': 'admin',
-                'company': 'SaaS Platform',
+                'company': 'WaterSight',
                 'is_staff': True,
                 'is_superuser': True,
             }

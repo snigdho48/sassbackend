@@ -27,9 +27,9 @@ from drf_yasg import openapi
 # Swagger Schema View
 schema_view = get_schema_view(
     openapi.Info(
-        title="SaaS Platform API",
+        title="WaterSight Platform API",
         default_version='v1',
-        description="API documentation for the SaaS Platform with JWT authentication",
+        description="API documentation for the WaterSight Platform with JWT authentication",
         terms_of_service="https://www.example.com/terms/",
         contact=openapi.Contact(email="contact@example.com"),
         license=openapi.License(name="MIT License"),
