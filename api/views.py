@@ -873,6 +873,7 @@ class PlantManagementViewSet(viewsets.ModelViewSet):
         operation_description="List all plants for management table with full data",
         manual_parameters=[
             openapi.Parameter('search', openapi.IN_QUERY, description="Search plants by name", type=openapi.TYPE_STRING),
+            openapi.Parameter('owners', openapi.IN_QUERY, description="Filter by owner IDs (comma-separated, admin only)", type=openapi.TYPE_STRING),
             openapi.Parameter('page', openapi.IN_QUERY, description="Page number", type=openapi.TYPE_INTEGER),
             openapi.Parameter('page_size', openapi.IN_QUERY, description="Items per page (max 100)", type=openapi.TYPE_INTEGER),
         ],
@@ -895,10 +896,17 @@ class PlantManagementViewSet(viewsets.ModelViewSet):
     def list(self, request, *args, **kwargs):
         # Add search functionality
         search = request.query_params.get('search', '')
+        owners = request.query_params.get('owners', '')
         queryset = self.get_queryset()
         
         if search:
             queryset = queryset.filter(name__icontains=search)
+        
+        # Add owner filtering (admin only)
+        if owners and request.user.is_admin:
+            owner_ids = [int(id.strip()) for id in owners.split(',') if id.strip().isdigit()]
+            if owner_ids:
+                queryset = queryset.filter(owner_id__in=owner_ids)
         
         # Add pagination
         page_size = min(int(request.query_params.get('page_size', 10)), 100)
@@ -913,8 +921,8 @@ class PlantManagementViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(page, many=True)
         return Response({
             'count': paginator.count,
-            'next': page.has_next() and request.build_absolute_uri(f"?page={page.next_page_number()}&search={search}&page_size={page_size}") or None,
-            'previous': page.has_previous() and request.build_absolute_uri(f"?page={page.previous_page_number()}&search={search}&page_size={page_size}") or None,
+            'next': page.has_next() and request.build_absolute_uri(f"?page={page.next_page_number()}&search={search}&owners={owners}&page_size={page_size}") or None,
+            'previous': page.has_previous() and request.build_absolute_uri(f"?page={page.previous_page_number()}&search={search}&owners={owners}&page_size={page_size}") or None,
             'results': serializer.data
         })
 

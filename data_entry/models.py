@@ -67,6 +67,7 @@ class Plant(models.Model):
     cooling_hardness_max = models.DecimalField(max_digits=6, decimal_places=2, default=300)
     cooling_alkalinity_max = models.DecimalField(max_digits=6, decimal_places=2, default=300)
     cooling_chloride_max = models.DecimalField(max_digits=6, decimal_places=2, default=250)
+    cooling_chloride_enabled = models.BooleanField(default=False, help_text="Enable chloride monitoring for this plant")
     cooling_cycle_min = models.DecimalField(max_digits=4, decimal_places=1, default=5.0)
     cooling_cycle_max = models.DecimalField(max_digits=4, decimal_places=1, default=8.0)
     cooling_iron_max = models.DecimalField(max_digits=4, decimal_places=1, default=3.0)
@@ -88,15 +89,20 @@ class Plant(models.Model):
     
     def get_cooling_parameters(self):
         """Get cooling water parameters for this plant."""
-        return {
+        params = {
             'ph': {'min': self.cooling_ph_min, 'max': self.cooling_ph_max},
             'tds': {'min': self.cooling_tds_min, 'max': self.cooling_tds_max},
             'hardness': {'max': self.cooling_hardness_max},
             'alkalinity': {'max': self.cooling_alkalinity_max},
-            'chloride': {'max': self.cooling_chloride_max},
             'cycle': {'min': self.cooling_cycle_min, 'max': self.cooling_cycle_max},
             'iron': {'max': self.cooling_iron_max}
         }
+        
+        # Only include chloride if enabled
+        if self.cooling_chloride_enabled:
+            params['chloride'] = {'max': self.cooling_chloride_max}
+            
+        return params
     
     def get_boiler_parameters(self):
         """Get boiler water parameters for this plant."""
@@ -176,12 +182,16 @@ class WaterAnalysis(models.Model):
     def _calculate_cooling_indices(self):
         """Calculate LSI, RSI, PSI, and LR indices for cooling water."""
         try:
-            # Convert Decimal fields to float for calculations
-            ph = float(self.ph)
-            tds = float(self.tds)
+            # Convert Decimal fields to float for calculations with safe conversion
+            ph = float(self.ph) if self.ph else 0
+            tds = float(self.tds) if self.tds else 0
             total_alkalinity = float(self.total_alkalinity) if self.total_alkalinity else 0
-            hardness = float(self.hardness)
-            chloride = float(self.chloride) if self.chloride else 0
+            hardness = float(self.hardness) if self.hardness else 0
+            # Handle chloride - only use if plant has chloride enabled and value is provided
+            if hasattr(self, 'plant') and self.plant and self.plant.cooling_chloride_enabled:
+                chloride = float(self.chloride) if self.chloride else 0
+            else:
+                chloride = 0  # Skip chloride if not enabled
             temperature = float(self.temperature) if self.temperature else 25
             sulphate = float(self.sulphate) if self.sulphate else 0
             
@@ -206,10 +216,18 @@ class WaterAnalysis(models.Model):
             
             # Langelier Ratio (LR)
             # LR = (Cl + SO4) / (HCO3)
-            if total_alkalinity > 0:
-                self.lr = (chloride + sulphate) / total_alkalinity
+            # Only calculate if chloride is enabled for this plant
+            if hasattr(self, 'plant') and self.plant and self.plant.cooling_chloride_enabled:
+                if total_alkalinity > 0:
+                    self.lr = (chloride + sulphate) / total_alkalinity
+                else:
+                    self.lr = 0
             else:
-                self.lr = 0
+                # Skip chloride in calculation if not enabled
+                if total_alkalinity > 0:
+                    self.lr = sulphate / total_alkalinity
+                else:
+                    self.lr = 0
             
             # Determine status
             self.lsi_status = self._get_lsi_status()
@@ -227,9 +245,9 @@ class WaterAnalysis(models.Model):
     def _calculate_boiler_stability_score(self):
         """Calculate stability score for boiler water."""
         try:
-            ph = float(self.ph)
-            tds = float(self.tds)
-            hardness = float(self.hardness)
+            ph = float(self.ph) if self.ph else 0
+            tds = float(self.tds) if self.tds else 0
+            hardness = float(self.hardness) if self.hardness else 0
             m_alkalinity = float(self.m_alkalinity) if self.m_alkalinity else 0
             
             # Start with 100 points
