@@ -162,6 +162,49 @@ class WaterAnalysis(models.Model):
     def __str__(self):
         return f"{self.user.email} - {self.analysis_name} ({self.analysis_date})"
     
+    def save(self, *args, **kwargs):
+        """Override save to create WaterTrend records for historical tracking."""
+        is_new = self.pk is None
+        super().save(*args, **kwargs)
+        
+        # Create trend records for new analyses
+        if is_new:
+            try:
+                self._create_trend_records()
+            except Exception as e:
+                print(f"Error creating trend records: {e}")
+                # Don't fail the save if trend creation fails
+    
+    def _create_trend_records(self):
+        """Create WaterTrend records for this analysis."""
+        from django.utils import timezone
+        from django.apps import apps
+        
+        # Get WaterTrend model using apps registry to avoid circular import
+        WaterTrend = apps.get_model('data_entry', 'WaterTrend')
+        
+        # Parameters to track for trends
+        trend_parameters = {
+            'ph': self.ph,
+            'lsi': self.lsi,
+            'rsi': self.rsi,
+        }
+        
+        # Add LR only if chloride monitoring is enabled for the plant
+        if self.plant and self.plant.cooling_chloride_enabled and self.lr is not None:
+            trend_parameters['lr'] = self.lr
+        
+        # Create trend records
+        for parameter, value in trend_parameters.items():
+            if value is not None:
+                WaterTrend.objects.create(
+                    user=self.user,
+                    parameter=parameter,
+                    trend_date=self.analysis_date,
+                    value=value,
+                    analysis_id=self.id  # Add analysis reference
+                )
+    
     def calculate_indices(self):
         """Calculate water stability indices based on analysis type."""
         try:
@@ -491,11 +534,12 @@ class WaterTrend(models.Model):
     parameter = models.CharField(max_length=50)  # ph, lsi, rsi, etc.
     value = models.DecimalField(max_digits=6, decimal_places=2)
     trend_date = models.DateField(default=timezone.now)
+    analysis_id = models.IntegerField(null=True, blank=True, help_text="Reference to WaterAnalysis ID")
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
-        ordering = ['-trend_date']
-        unique_together = ['user', 'parameter', 'trend_date']
+        ordering = ['-trend_date', '-created_at']
+        unique_together = ['user', 'parameter', 'analysis_id']  # Allow multiple per date
     
     def __str__(self):
         return f"{self.user.email} - {self.parameter}: {self.value} ({self.trend_date})"

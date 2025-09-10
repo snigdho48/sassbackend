@@ -114,20 +114,7 @@ class LoginView(APIView):
         }
     )
     def post(self, request):
-        # Debug: Print the incoming request data
-        print(f"DEBUG: Request data: {request.data}")
-        print(f"DEBUG: Request content type: {request.content_type}")
-        print(f"DEBUG: Request method: {request.method}")
-        print(f"DEBUG: Request path: {request.path}")
-        
-        # Check if we're getting the right data
-        email = request.data.get('email')
-        password = request.data.get('password')
-        print(f"DEBUG: Email from request: {email}")
-        print(f"DEBUG: Password from request: {password}")
-        
         serializer = LoginSerializer(data=request.data, context={'request': request})
-        print(f"DEBUG: Serializer data: {serializer.initial_data}")
         
         if serializer.is_valid():
             user = serializer.validated_data['user']
@@ -139,10 +126,7 @@ class LoginView(APIView):
                 'user': UserSerializer(user).data
             })
         else:
-            # Debug: Print serializer errors
-            print(f"DEBUG: Serializer errors: {serializer.errors}")
-            print(f"DEBUG: Serializer is valid: {serializer.is_valid()}")
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class RegisterView(APIView):
     """
@@ -980,7 +964,11 @@ class WaterAnalysisViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         water_analysis = serializer.save(user=self.request.user)
         water_analysis.calculate_indices()
-        water_analysis._generate_recommendations()
+        try:
+            water_analysis._generate_recommendations()
+        except Exception as e:
+            print(f"Error generating recommendations: {e}")
+            # Don't fail the save if recommendations generation fails
     
     @swagger_auto_schema(
         operation_description="List water analyses for the current user",
@@ -1027,55 +1015,76 @@ class WaterAnalysisViewSet(viewsets.ModelViewSet):
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def water_trends_view(request):
-    """Get water analysis trends with enhanced data."""
+    """Get water analysis trends with real historical data grouped by date with min/max values."""
     parameter = request.GET.get('parameter', 'ph')
     days = int(request.GET.get('days', 30))
+    plant_id = request.GET.get('plant_id')
     
-    # Get trends from database
-    trends = WaterTrend.objects.filter(
-        user=request.user,
-        parameter=parameter
-    ).order_by('trend_date')[:days]
+    # Get trends from database grouped by date
+    from django.db.models import Min, Max, Count
+    from django.utils import timezone
+    from datetime import timedelta
+    
+    # Calculate date range
+    end_date = timezone.now().date()
+    start_date = end_date - timedelta(days=days)
+    
+    # Build filter query
+    filter_kwargs = {
+        'parameter': parameter,
+        'trend_date__gte': start_date,
+        'trend_date__lte': end_date
+    }
+    
+    # Filter by user (unless admin)
+    if not request.user.is_staff:
+        filter_kwargs['user'] = request.user
+    
+    # Filter by plant if specified
+    if plant_id:
+        # Get WaterAnalysis records for this plant and user
+        from data_entry.models import WaterAnalysis
+        
+        analysis_ids = WaterAnalysis.objects.filter(
+            plant=plant_id,
+            **({'user': request.user} if not request.user.is_staff else {})
+        ).values_list('id', flat=True)
+        
+        if analysis_ids:
+            filter_kwargs['analysis_id__in'] = analysis_ids
+        else:
+            # No analyses found for this plant, return empty
+            return Response([])
+    
+    # Get all individual trend records
+    trends = WaterTrend.objects.filter(**filter_kwargs).order_by('trend_date')
+    
+    # Group by date and calculate min/max for each date
+    from collections import defaultdict
+    grouped_trends = defaultdict(list)
+    
+    for trend in trends:
+        grouped_trends[trend.trend_date].append(float(trend.value))
     
     data = []
-    for trend in trends:
+    for date, values in grouped_trends.items():
+        min_value = min(values)
+        max_value = max(values)
+        
         data.append({
-            'date': trend.trend_date.strftime('%Y-%m-%d'),
-            'value': float(trend.value),
-            'parameter': trend.parameter,
-            'formatted_date': trend.trend_date.strftime('%b %d'),
-            'status': get_trend_status(parameter, float(trend.value))
+            'date': date.strftime('%Y-%m-%d'),
+            'min_value': min_value,
+            'max_value': max_value,
+            'parameter': parameter,
+            'formatted_date': date.strftime('%b %d'),
+            'count': len(values),
+            'min_status': get_trend_status(parameter, min_value),
+            'max_status': get_trend_status(parameter, max_value)
         })
     
-    # If no trends in database, generate sample trends for demonstration
+    # If no trends in database, return empty array
     if not data:
-        from datetime import timedelta
-        from django.utils import timezone
-        import random
-        
-        base_values = {
-            'ph': 7.2,
-            'lsi': -0.1,
-            'rsi': 6.8,
-            'psi': 6.8,
-            'lr': 0.2
-        }
-        
-        for i in range(min(days, 30)):
-            date = timezone.now().date() - timedelta(days=i)
-            variation = random.uniform(-0.3, 0.3)
-            value = base_values.get(parameter, 0) + variation
-            
-            data.append({
-                'date': date.strftime('%Y-%m-%d'),
-                'value': round(value, 2),
-                'parameter': parameter,
-                'formatted_date': date.strftime('%b %d'),
-                'status': get_trend_status(parameter, value)
-            })
-        
-        # Sort by date for proper ordering
-        data.sort(key=lambda x: x['date'])
+        return Response([])
     
     return Response(data)
 
@@ -1257,7 +1266,6 @@ def water_recommendations_view(request):
         
         return Response(data)
     except Exception as e:
-        print(f"Error in water_recommendations_view: {e}")
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -1287,7 +1295,6 @@ def calculate_water_analysis_view(request):
 
             
     except Exception as e:
-        print(f"Error calculating indices: {e}")
         return Response({
             'error': f'Calculation error: {str(e)}'
         }, status=status.HTTP_400_BAD_REQUEST)
@@ -1412,7 +1419,6 @@ def calculate_water_analysis_with_recommendations_view(request):
                     deviation = ph - ph_max
                 points_to_deduct = min((deviation / 0.1) * 5, 30)  # Cap at 30 points
                 stability_score -= points_to_deduct
-                print(f"pH deviation: {deviation}, points deducted: {points_to_deduct}, score after: {stability_score}")
             
             # TDS: Ideal Range based on plant parameters
             if tds_min <= tds <= tds_max:
@@ -1421,10 +1427,8 @@ def calculate_water_analysis_with_recommendations_view(request):
             else:
                 if tds > tds_max * 1.15:  # 15% above max
                     stability_score -= 20  # Subtract 20 points if > 15% above max
-                    print(f"TDS > {tds_max * 1.15}: points deducted: 20, score after: {stability_score}")
                 else:
                     stability_score -= 10  # Subtract 10 points if outside ideal range
-                    print(f"TDS outside ideal range: points deducted: 10, score after: {stability_score}")
             
             # Hardness: Ideal Range based on plant parameters
             if hardness <= hardness_max:
@@ -1432,10 +1436,8 @@ def calculate_water_analysis_with_recommendations_view(request):
                 pass
             elif hardness <= hardness_max * 2.5:  # 2.5x max
                 stability_score -= 10  # Subtract 10 points if 2.5x max
-                print(f"Hardness {hardness_max}-{hardness_max * 2.5}: points deducted: 10, score after: {stability_score}")
             else:
                 stability_score -= 20  # Subtract 20 points if > 2.5x max
-                print(f"Hardness > {hardness_max * 2.5}: points deducted: 20, score after: {stability_score}")
             
             # M-Alk: Ideal Range based on plant parameters
             if alk_min <= m_alkalinity <= alk_max:
@@ -1449,12 +1451,9 @@ def calculate_water_analysis_with_recommendations_view(request):
                     deviation = m_alkalinity - alk_max
                 points_to_deduct = (deviation / 50) * 2
                 stability_score -= points_to_deduct
-                print(f"M-Alk deviation: {deviation}, points deducted: {points_to_deduct}, score after: {stability_score}")
             
             # Cap score between 0 and 100
             stability_score = max(0, min(100, stability_score))
-            print(f"Final stability score: {stability_score}")
-            print(f"Input values - pH: {ph}, TDS: {tds}, Hardness: {hardness}, M-Alk: {m_alkalinity}")
             
             # Determine overall status based on score
             if stability_score >= 80:
@@ -1952,12 +1951,10 @@ def calculate_water_analysis_with_recommendations_view(request):
             'calculation': {
                 'lsi': round(lsi, 2),
                 'rsi': round(rsi, 2),
-                'psi': round(psi, 2),
                 'lr': round(lr, 2),
                 'stability_score': round(stability_score, 2),
                 'lsi_status': lsi_status,
                 'rsi_status': rsi_status,
-                'psi_status': psi_status,
                 'lr_status': lr_status,
                 'overall_status': overall_status,
                 'analysis_type': 'cooling'
@@ -1966,7 +1963,6 @@ def calculate_water_analysis_with_recommendations_view(request):
         })
             
     except Exception as e:
-        print(f"Error in combined calculation: {e}")
         return Response({
             'error': f'Calculation error: {str(e)}'
         }, status=status.HTTP_400_BAD_REQUEST)
@@ -1976,11 +1972,7 @@ def calculate_water_analysis_with_recommendations_view(request):
 @permission_classes([permissions.AllowAny])
 def debug_login_view(request):
     """Debug view to see which endpoint is being hit and what data is received."""
-    print(f"DEBUG: debug_login_view called")
-    print(f"DEBUG: Request method: {request.method}")
-    print(f"DEBUG: Request path: {request.path}")
-    print(f"DEBUG: Request data: {request.data}")
-    print(f"DEBUG: Request content type: {request.content_type}")
+
     
     return Response({
         'message': 'Debug view called',

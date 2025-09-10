@@ -205,14 +205,14 @@ class WaterAnalysisSerializer(serializers.ModelSerializer):
     class Meta:
         model = WaterAnalysis
         fields = [
-            'id', 'analysis_name', 'analysis_date', 'ph', 'tds', 'total_alkalinity', 
-            'hardness', 'chloride', 'temperature', 'lsi', 'rsi', 'ls', 'stability_score',
-            'lsi_status', 'rsi_status', 'ls_status', 'overall_status', 'notes', 
-            'created_at', 'updated_at'
+            'id', 'analysis_name', 'analysis_date', 'plant', 'analysis_type', 'ph', 'tds', 'total_alkalinity', 
+            'hardness', 'chloride', 'temperature', 'basin_temperature', 'sulphate',
+            'm_alkalinity', 'lsi', 'rsi', 'psi', 'lr', 'stability_score',
+            'lsi_status', 'rsi_status', 'psi_status', 'lr_status', 'overall_status', 
+            'notes', 'created_at', 'updated_at'
         ]
         read_only_fields = [
-            'id', 'lsi', 'rsi', 'ls', 'stability_score', 'lsi_status', 'rsi_status', 
-            'ls_status', 'overall_status', 'created_at', 'updated_at'
+            'id', 'stability_score', 'created_at', 'updated_at'
         ]
     
     def create(self, validated_data):
