@@ -70,7 +70,9 @@ class Plant(models.Model):
     cooling_chloride_enabled = models.BooleanField(default=False, help_text="Enable chloride monitoring for this plant")
     cooling_cycle_min = models.DecimalField(max_digits=4, decimal_places=1, default=5.0)
     cooling_cycle_max = models.DecimalField(max_digits=4, decimal_places=1, default=8.0)
+    cooling_cycle_enabled = models.BooleanField(default=False, help_text="Enable cycle of concentration monitoring for this plant")
     cooling_iron_max = models.DecimalField(max_digits=4, decimal_places=1, default=3.0)
+    cooling_iron_enabled = models.BooleanField(default=False, help_text="Enable iron monitoring for this plant")
     
     # Plant-specific parameter ranges for boiler water
     boiler_ph_min = models.DecimalField(max_digits=4, decimal_places=2, default=10.5)
@@ -80,6 +82,21 @@ class Plant(models.Model):
     boiler_hardness_max = models.DecimalField(max_digits=4, decimal_places=1, default=2.0)
     boiler_alkalinity_min = models.DecimalField(max_digits=6, decimal_places=2, default=600)
     boiler_alkalinity_max = models.DecimalField(max_digits=6, decimal_places=2, default=1400)
+    
+    # Boiler water optional parameters
+    boiler_p_alkalinity_min = models.DecimalField(max_digits=6, decimal_places=2, default=500)
+    boiler_p_alkalinity_max = models.DecimalField(max_digits=6, decimal_places=2, default=700)
+    boiler_p_alkalinity_enabled = models.BooleanField(default=False, help_text="Enable P-alkalinity monitoring for this plant")
+    boiler_oh_alkalinity_min = models.DecimalField(max_digits=6, decimal_places=2, default=700)
+    boiler_oh_alkalinity_max = models.DecimalField(max_digits=6, decimal_places=2, default=900)
+    boiler_oh_alkalinity_enabled = models.BooleanField(default=False, help_text="Enable OH-alkalinity monitoring for this plant")
+    boiler_sulfite_min = models.DecimalField(max_digits=6, decimal_places=2, default=30)
+    boiler_sulfite_max = models.DecimalField(max_digits=6, decimal_places=2, default=60)
+    boiler_sulfite_enabled = models.BooleanField(default=False, help_text="Enable sulfite monitoring for this plant")
+    boiler_chlorides_max = models.DecimalField(max_digits=6, decimal_places=2, default=200)
+    boiler_chlorides_enabled = models.BooleanField(default=False, help_text="Enable chlorides monitoring for this plant")
+    boiler_iron_max = models.DecimalField(max_digits=4, decimal_places=1, default=5.0)
+    boiler_iron_enabled = models.BooleanField(default=False, help_text="Enable iron monitoring for this plant")
     
     class Meta:
         ordering = ['name']
@@ -93,25 +110,41 @@ class Plant(models.Model):
             'ph': {'min': self.cooling_ph_min, 'max': self.cooling_ph_max},
             'tds': {'min': self.cooling_tds_min, 'max': self.cooling_tds_max},
             'hardness': {'max': self.cooling_hardness_max},
-            'alkalinity': {'max': self.cooling_alkalinity_max},
-            'cycle': {'min': self.cooling_cycle_min, 'max': self.cooling_cycle_max},
-            'iron': {'max': self.cooling_iron_max}
+            'alkalinity': {'max': self.cooling_alkalinity_max}
         }
         
-        # Only include chloride if enabled
+        # Only include optional parameters if enabled
         if self.cooling_chloride_enabled:
             params['chloride'] = {'max': self.cooling_chloride_max}
+        if self.cooling_cycle_enabled:
+            params['cycle'] = {'min': self.cooling_cycle_min, 'max': self.cooling_cycle_max}
+        if self.cooling_iron_enabled:
+            params['iron'] = {'max': self.cooling_iron_max}
             
         return params
     
     def get_boiler_parameters(self):
         """Get boiler water parameters for this plant."""
-        return {
+        params = {
             'ph': {'min': self.boiler_ph_min, 'max': self.boiler_ph_max},
             'tds': {'min': self.boiler_tds_min, 'max': self.boiler_tds_max},
             'hardness': {'max': self.boiler_hardness_max},
             'alkalinity': {'min': self.boiler_alkalinity_min, 'max': self.boiler_alkalinity_max}
         }
+        
+        # Only include optional parameters if enabled
+        if self.boiler_p_alkalinity_enabled:
+            params['p_alkalinity'] = {'min': self.boiler_p_alkalinity_min, 'max': self.boiler_p_alkalinity_max}
+        if self.boiler_oh_alkalinity_enabled:
+            params['oh_alkalinity'] = {'min': self.boiler_oh_alkalinity_min, 'max': self.boiler_oh_alkalinity_max}
+        if self.boiler_sulfite_enabled:
+            params['sulfite'] = {'min': self.boiler_sulfite_min, 'max': self.boiler_sulfite_max}
+        if self.boiler_chlorides_enabled:
+            params['chlorides'] = {'max': self.boiler_chlorides_max}
+        if self.boiler_iron_enabled:
+            params['iron'] = {'max': self.boiler_iron_max}
+            
+        return params
 
 
 class WaterAnalysis(models.Model):
