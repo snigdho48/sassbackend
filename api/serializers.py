@@ -249,6 +249,26 @@ class PlantDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Plant
         fields = '__all__'
+    
+    def validate(self, attrs):
+        """Ensure boolean fields have proper default values"""
+        boolean_fields = [
+            'is_active',
+            'cooling_chloride_enabled',
+            'cooling_cycle_enabled', 
+            'cooling_iron_enabled',
+            'boiler_p_alkalinity_enabled',
+            'boiler_oh_alkalinity_enabled',
+            'boiler_sulfite_enabled',
+            'boiler_chlorides_enabled',
+            'boiler_iron_enabled'
+        ]
+        
+        for field in boolean_fields:
+            if field in attrs and attrs[field] is None:
+                attrs[field] = False
+                
+        return attrs
 
 class WaterRecommendationSerializer(serializers.ModelSerializer):
     class Meta:
