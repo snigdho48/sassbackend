@@ -98,6 +98,21 @@ class Plant(models.Model):
     boiler_iron_max = models.DecimalField(max_digits=4, decimal_places=1, default=5.0)
     boiler_iron_enabled = models.BooleanField(default=False, help_text="Enable iron monitoring for this plant")
     
+    # LSI and RSI parameters (for both cooling and boiler water)
+    cooling_lsi_min = models.DecimalField(max_digits=4, decimal_places=1, default=-2.0)
+    cooling_lsi_max = models.DecimalField(max_digits=4, decimal_places=1, default=2.0)
+    cooling_lsi_enabled = models.BooleanField(default=False, help_text="Enable LSI monitoring for cooling water")
+    cooling_rsi_min = models.DecimalField(max_digits=4, decimal_places=1, default=6.0)
+    cooling_rsi_max = models.DecimalField(max_digits=4, decimal_places=1, default=7.0)
+    cooling_rsi_enabled = models.BooleanField(default=False, help_text="Enable RSI monitoring for cooling water")
+    
+    boiler_lsi_min = models.DecimalField(max_digits=4, decimal_places=1, default=-2.0)
+    boiler_lsi_max = models.DecimalField(max_digits=4, decimal_places=1, default=2.0)
+    boiler_lsi_enabled = models.BooleanField(default=False, help_text="Enable LSI monitoring for boiler water")
+    boiler_rsi_min = models.DecimalField(max_digits=4, decimal_places=1, default=6.0)
+    boiler_rsi_max = models.DecimalField(max_digits=4, decimal_places=1, default=7.0)
+    boiler_rsi_enabled = models.BooleanField(default=False, help_text="Enable RSI monitoring for boiler water")
+    
     class Meta:
         ordering = ['name']
     
@@ -120,6 +135,10 @@ class Plant(models.Model):
             params['cycle'] = {'min': self.cooling_cycle_min, 'max': self.cooling_cycle_max}
         if self.cooling_iron_enabled:
             params['iron'] = {'max': self.cooling_iron_max}
+        if self.cooling_lsi_enabled:
+            params['lsi'] = {'min': self.cooling_lsi_min, 'max': self.cooling_lsi_max}
+        if self.cooling_rsi_enabled:
+            params['rsi'] = {'min': self.cooling_rsi_min, 'max': self.cooling_rsi_max}
             
         return params
     
@@ -143,6 +162,10 @@ class Plant(models.Model):
             params['chlorides'] = {'max': self.boiler_chlorides_max}
         if self.boiler_iron_enabled:
             params['iron'] = {'max': self.boiler_iron_max}
+        if self.boiler_lsi_enabled:
+            params['lsi'] = {'min': self.boiler_lsi_min, 'max': self.boiler_lsi_max}
+        if self.boiler_rsi_enabled:
+            params['rsi'] = {'min': self.boiler_rsi_min, 'max': self.boiler_rsi_max}
             
         return params
 

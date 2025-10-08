@@ -257,11 +257,15 @@ class PlantDetailSerializer(serializers.ModelSerializer):
             'cooling_chloride_enabled',
             'cooling_cycle_enabled', 
             'cooling_iron_enabled',
+            'cooling_lsi_enabled',
+            'cooling_rsi_enabled',
             'boiler_p_alkalinity_enabled',
             'boiler_oh_alkalinity_enabled',
             'boiler_sulfite_enabled',
             'boiler_chlorides_enabled',
-            'boiler_iron_enabled'
+            'boiler_iron_enabled',
+            'boiler_lsi_enabled',
+            'boiler_rsi_enabled'
         ]
         
         for field in boolean_fields:
