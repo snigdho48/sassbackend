@@ -36,8 +36,9 @@ class WaterAnalysisSerializer(serializers.ModelSerializer):
         model = WaterAnalysis
         fields = [
             'id', 'plant', 'plant_name', 'analysis_name', 'analysis_type', 'analysis_date', 'ph', 'tds', 'hardness',
-            'total_alkalinity', 'chloride', 'temperature', 'basin_temperature', 'sulphate',
-            'm_alkalinity', 'lsi', 'rsi', 'psi', 'lr', 'stability_score',
+            'total_alkalinity', 'chloride', 'temperature', 'basin_temperature', 'sulphate', 'cycle', 'iron', 'phosphate',
+            'm_alkalinity', 'p_alkalinity', 'oh_alkalinity', 'sulphite', 'sodium_chloride', 'do', 'boiler_phosphate',
+            'lsi', 'rsi', 'psi', 'lr', 'stability_score',
             'lsi_status', 'rsi_status', 'psi_status', 'lr_status', 'overall_status', 'notes', 
             'created_at', 'updated_at'
         ]

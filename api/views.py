@@ -1,7 +1,8 @@
-from rest_framework import status, generics, permissions, viewsets
+from rest_framework import status, generics, permissions, viewsets, serializers
 from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.exceptions import ValidationError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.contrib.auth import authenticate
@@ -33,14 +34,6 @@ from .models import APIUsage
 class IsAdminUser(permissions.BasePermission):
     def has_permission(self, request, view):
         return request.user and request.user.is_admin
-
-class IsClientOrAdmin(permissions.BasePermission):
-    def has_permission(self, request, view):
-        return request.user and (request.user.is_client or request.user.is_admin)
-
-class IsManagerOrAdmin(permissions.BasePermission):
-    def has_permission(self, request, view):
-        return request.user and (request.user.is_manager or request.user.is_admin)
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     """Custom JWT token view that includes user information."""
@@ -619,15 +612,102 @@ class AdminUserManagementView(APIView):
     permission_classes = [IsAdminUser]
     
     def get(self, request):
-        users = CustomUser.objects.all()
+        """Get users - Super Admin sees all, Admin sees only users assigned to them"""
+        user = request.user
+        
+        # Super Admin can see all users
+        if user.can_create_plants:  # Super Admin
+            users = CustomUser.objects.all()
+        else:
+            # Admin users can only see users assigned to them
+            users = CustomUser.objects.filter(
+                assigned_admin=user
+            )
+        
         serializer = UserSerializer(users, many=True)
         return Response(serializer.data)
     
     def post(self, request):
+        user = request.user
+        requested_role = request.data.get('role', 'general_user')
+        assigned_admin_id = request.data.get('assigned_admin')
+        
+        # If Admin (not Super Admin) is creating a user, enforce restrictions
+        if not user.can_create_plants:  # Admin (not Super Admin)
+            # Admin can only create General Users
+            # Automatically set role to general_user (ignore any role in request)
+            request.data['role'] = 'general_user'
+            # Automatically assign to themselves
+            request.data['assigned_admin'] = user.id
+            # Set company to admin's company
+            if hasattr(user, 'company') and user.company:
+                request.data['company'] = user.company
+        
+        # Check permissions based on the role being created
+        if requested_role == 'admin' or requested_role == 'super_admin':
+            # Only Super Admin can create Admin or Super Admin users
+            if not user.can_create_admin_users:
+                return Response(
+                    {'error': 'Only Super Administrator can create Admin users'}, 
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            # Super Admin creating another Super Admin doesn't need assigned_admin
+            # But Super Admin creating an Admin must assign an admin (themselves or another admin)
+            if requested_role == 'admin':
+                if not assigned_admin_id:
+                    return Response(
+                        {'error': 'When creating an Admin user, you must assign an admin. For Super Admin creating Admin, assign yourself or another admin.'}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                # Validate assigned_admin is an Admin or Super Admin
+                try:
+                    assigned_admin = CustomUser.objects.get(id=assigned_admin_id)
+                    if assigned_admin.role not in [CustomUser.UserRole.ADMIN, CustomUser.UserRole.SUPER_ADMIN]:
+                        return Response(
+                            {'error': 'assigned_admin must be an Admin or Super Admin'}, 
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                except CustomUser.DoesNotExist:
+                    return Response(
+                        {'error': 'assigned_admin user not found'}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+        elif requested_role == 'general_user':
+            # Super Admin and Admin can create General Users
+            if not user.can_create_general_users:
+                return Response(
+                    {'error': 'You do not have permission to create General Users'}, 
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            # Admin creating General User: automatically assign to themselves (already set above)
+            if not user.can_create_plants:  # Admin (not Super Admin)
+                # Already handled above, but ensure it's set
+                request.data['assigned_admin'] = user.id
+            # Super Admin creating General User: must assign an admin
+            else:
+                if not assigned_admin_id:
+                    return Response(
+                        {'error': 'When creating a General User, you must assign an admin'}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                # Validate assigned_admin is an Admin or Super Admin
+                try:
+                    assigned_admin = CustomUser.objects.get(id=assigned_admin_id)
+                    if assigned_admin.role not in [CustomUser.UserRole.ADMIN, CustomUser.UserRole.SUPER_ADMIN]:
+                        return Response(
+                            {'error': 'assigned_admin must be an Admin or Super Admin'}, 
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                except CustomUser.DoesNotExist:
+                    return Response(
+                        {'error': 'assigned_admin user not found'}, 
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+        
         serializer = UserRegistrationSerializer(data=request.data)
         if serializer.is_valid():
-            user = serializer.save()
-            return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
+            created_user = serializer.save()
+            return Response(UserSerializer(created_user).data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class AdminUserDetailView(APIView):
@@ -635,16 +715,60 @@ class AdminUserDetailView(APIView):
     
     def get(self, request, user_id):
         try:
-            user = CustomUser.objects.get(id=user_id)
-            serializer = UserSerializer(user)
+            target_user = CustomUser.objects.get(id=user_id)
+            current_user = request.user
+            
+            # Check permissions: Admin users can only view users assigned to them
+            if not current_user.can_create_plants:  # Admin (not Super Admin)
+                if target_user.assigned_admin != current_user:
+                    return Response(
+                        {'error': 'You can only view users assigned to you'}, 
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+            
+            serializer = UserSerializer(target_user)
             return Response(serializer.data)
         except CustomUser.DoesNotExist:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
     
     def put(self, request, user_id):
         try:
-            user = CustomUser.objects.get(id=user_id)
-            serializer = UserSerializer(user, data=request.data, partial=True)
+            target_user = CustomUser.objects.get(id=user_id)
+            current_user = request.user
+            
+            # Check permissions: Admin users can only edit users assigned to them
+            if not current_user.can_create_plants:  # Admin (not Super Admin)
+                if target_user.assigned_admin != current_user:
+                    return Response(
+                        {'error': 'You can only edit users assigned to you'}, 
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+                # Admin cannot change role - always keep as general_user
+                request.data['role'] = 'general_user'
+                # Set company to admin's company
+                if hasattr(current_user, 'company') and current_user.company:
+                    request.data['company'] = current_user.company
+            
+            requested_role = request.data.get('role')
+            
+            # Check permissions if role is being changed (only for Super Admin)
+            if requested_role and requested_role != target_user.role:
+                if requested_role == 'admin' or requested_role == 'super_admin':
+                    # Only Super Admin can change a user's role to Admin or Super Admin
+                    if not current_user.can_create_admin_users:
+                        return Response(
+                            {'error': 'Only Super Administrator can assign Admin or Super Admin roles'}, 
+                            status=status.HTTP_403_FORBIDDEN
+                        )
+                elif requested_role == 'general_user':
+                    # Super Admin and Admin can assign General User role
+                    if not current_user.can_create_general_users:
+                        return Response(
+                            {'error': 'You do not have permission to assign General User role'}, 
+                            status=status.HTTP_403_FORBIDDEN
+                        )
+            
+            serializer = UserSerializer(target_user, data=request.data, partial=True)
             if serializer.is_valid():
                 serializer.save()
                 return Response(serializer.data)
@@ -654,8 +778,18 @@ class AdminUserDetailView(APIView):
     
     def delete(self, request, user_id):
         try:
-            user = CustomUser.objects.get(id=user_id)
-            user.delete()
+            target_user = CustomUser.objects.get(id=user_id)
+            current_user = request.user
+            
+            # Check permissions: Admin users can only delete users assigned to them
+            if not current_user.can_create_plants:  # Admin (not Super Admin)
+                if target_user.assigned_admin != current_user:
+                    return Response(
+                        {'error': 'You can only delete users assigned to you'}, 
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+            
+            target_user.delete()
             return Response({'message': 'User deleted successfully'})
         except CustomUser.DoesNotExist:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -767,8 +901,12 @@ class PlantViewSet(viewsets.ModelViewSet):
             # Admins can see all active plants
             return Plant.objects.filter(is_active=True)
         else:
-            # Regular users can only see plants they own
-            return Plant.objects.filter(is_active=True, owner=user)
+            # Regular users can only see plants they own (check both owners ManyToMany and legacy owner field)
+            return Plant.objects.filter(
+                is_active=True
+            ).filter(
+                Q(owners=user) | Q(owner=user)
+            ).distinct()
     
     def get_serializer_class(self):
         """Use lightweight serializer for list, full serializer for detail"""
@@ -833,25 +971,63 @@ class PlantManagementViewSet(viewsets.ModelViewSet):
     )
     @action(detail=False, methods=['get'])
     def users(self, request):
-        """Get all users for plant owner assignment (admin only)"""
+        """Get users for plant owner assignment (admin only)
+        - Super Admin: See all users
+        - Admin: Only see users assigned to them (assigned_admin == current_user)
+        """
         if not request.user.is_admin:
             return Response(
                 {'error': 'Admin access required'}, 
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        users = CustomUser.objects.filter(is_active=True).order_by('first_name', 'last_name')
+        user = request.user
+        
+        # Super Admin can see all users
+        if user.can_create_plants:  # Super Admin
+            users = CustomUser.objects.filter(is_active=True).order_by('first_name', 'last_name')
+        else:
+            # Admin users can only see users assigned to them
+            users = CustomUser.objects.filter(
+                is_active=True,
+                assigned_admin=user
+            ).order_by('first_name', 'last_name')
+        
+        serializer = UserSerializer(users, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def admin_users(self, request):
+        """Get admin users only for plant creation (Super Admin only)
+        This endpoint is used when Super Admin is creating a plant and needs to assign it to a single admin.
+        """
+        if not request.user.can_create_plants:
+            return Response(
+                {'error': 'Super Admin access required'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Only return Admin users (not Super Admin or General Users)
+        users = CustomUser.objects.filter(
+            is_active=True,
+            role__in=[CustomUser.UserRole.ADMIN]
+        ).order_by('first_name', 'last_name')
+        
         serializer = UserSerializer(users, many=True)
         return Response(serializer.data)
     
     def get_queryset(self):
         user = self.request.user
-        if user.is_admin:
-            # Admins can see all plants (active and inactive)
+        
+        # Super Admin can see all plants (active and inactive)
+        if user.can_create_plants:
             return Plant.objects.all()
-        else:
-            # Regular users can only see plants they own
-            return Plant.objects.filter(owner=user)
+        
+        # Admin and General Users can only see plants where they are the owner
+        # Check both owners ManyToMany field and legacy owner ForeignKey field
+        return Plant.objects.filter(
+            Q(owners__id=user.id) | Q(owner_id=user.id)
+        ).distinct()
     
     @swagger_auto_schema(
         operation_description="List all plants for management table with full data",
@@ -886,11 +1062,13 @@ class PlantManagementViewSet(viewsets.ModelViewSet):
         if search:
             queryset = queryset.filter(name__icontains=search)
         
-        # Add owner filtering (admin only)
+        # Add owner filtering (admin only) - check both owners ManyToMany and legacy owner field
         if owners and request.user.is_admin:
             owner_ids = [int(id.strip()) for id in owners.split(',') if id.strip().isdigit()]
             if owner_ids:
-                queryset = queryset.filter(owner_id__in=owner_ids)
+                queryset = queryset.filter(
+                    Q(owners__id__in=owner_ids) | Q(owner_id__in=owner_ids)
+                ).distinct()
         
         # Add pagination
         page_size = min(int(request.query_params.get('page_size', 10)), 100)
@@ -911,42 +1089,90 @@ class PlantManagementViewSet(viewsets.ModelViewSet):
         })
 
     def update(self, request, *args, **kwargs):
-        """Update plant - admins can update any plant, clients can only update plants they own"""
+        """Update plant - Super Admin can edit all fields, Admin can only update owners"""
         instance = self.get_object()
         user = request.user
         
-        # Check permissions
-        if not user.is_admin and instance.owner != user:
+        # Check if user is Admin (not Super Admin)
+        if user.is_admin and not user.can_create_plants:
+            # Admin users can only update owners field (owner_ids is the write-only field name in serializer)
+            allowed_fields = {'owner_ids', 'owners'}  # Allow both for backward compatibility
+            request_fields = set(request.data.keys())
+            
+            # Check if request contains only owner-related fields or no fields at all
+            if request_fields and not request_fields.issubset(allowed_fields):
+                # Request contains fields other than owners
+                return Response(
+                    {'error': 'Admin users can only assign/change plant owners. Only Super Administrator can edit other plant fields.'}, 
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            # Allow the update to proceed (it's only owners)
+        elif not user.can_create_plants:
+            # Non-admin users cannot update plants at all
             return Response(
-                {'error': 'You can only update plants you own'}, 
+                {'error': 'Only Super Administrator can edit plants. Admin users can only assign/change plant owners.'}, 
                 status=status.HTTP_403_FORBIDDEN
             )
-        
-        # For non-admin users, set owner to current user
-        if not user.is_admin:
-            request.data['owner_id'] = user.id
         
         return super().update(request, *args, **kwargs)
 
     def create(self, request, *args, **kwargs):
-        """Create plant - admins can create plants for any user, clients create plants for themselves"""
+        """Create plant - only Super Admin can create plants, and must assign to a single admin"""
         user = request.user
         
-        # For non-admin users, set owner to current user
-        if not user.is_admin:
-            request.data['owner_id'] = user.id
+        # Only Super Admin can create plants
+        if not user.can_create_plants:
+            return Response(
+                {'error': 'Only Super Administrator can create plants'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
         
-        return super().create(request, *args, **kwargs)
+        # Validate that owner_id is provided and is an Admin user
+        owner_id = request.data.get('owner_id')
+        if not owner_id:
+            return Response(
+                {'error': 'Plant must be assigned to an Admin user'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            assigned_admin = CustomUser.objects.get(id=owner_id)
+            # Ensure the assigned user is an Admin (not Super Admin or General User)
+            if assigned_admin.role != CustomUser.UserRole.ADMIN:
+                return Response(
+                    {'error': 'Plant can only be assigned to an Admin user'}, 
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        except CustomUser.DoesNotExist:
+            return Response(
+                {'error': 'Assigned admin user not found'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Create the plant (this will set the owner field via serializer)
+        response = super().create(request, *args, **kwargs)
+        
+        # After creation, also add the admin to the owners ManyToMany field
+        if response.status_code == 201:
+            plant = Plant.objects.get(id=response.data['id'])
+            # Add to ManyToMany field (this is needed for the Admin to see the plant)
+            plant.owners.add(assigned_admin)
+            # Ensure the owner field is also set (in case serializer didn't set it)
+            if not plant.owner:
+                plant.owner = assigned_admin
+                plant.save()
+        
+        return response
 
     def destroy(self, request, *args, **kwargs):
-        """Delete plant - admins can delete any plant, clients can only delete plants they own"""
+        """Delete plant - only Super Admin can delete plants"""
         instance = self.get_object()
         user = request.user
         
-        # Check permissions
-        if not user.is_admin and instance.owner != user:
+        # Only Super Admin can delete plants
+        if not user.can_create_plants:
             return Response(
-                {'error': 'You can only delete plants you own'}, 
+                {'error': 'Only Super Administrator can delete plants. Admin users do not have permission.'}, 
                 status=status.HTTP_403_FORBIDDEN
             )
         
@@ -959,10 +1185,32 @@ class WaterAnalysisViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        return WaterAnalysis.objects.filter(user=self.request.user)
+        user = self.request.user
+        queryset = WaterAnalysis.objects.filter(user=user)
+        
+        # General Users can only see analyses for plants they own (check both owners ManyToMany and legacy owner field)
+        if user.is_general_user:
+            queryset = queryset.filter(
+                Q(plant__owners=user) | Q(plant__owner=user)
+            ).distinct()
+        
+        return queryset
     
     def perform_create(self, serializer):
-        water_analysis = serializer.save(user=self.request.user)
+        user = self.request.user
+        plant = serializer.validated_data.get('plant')
+        
+        # General Users can only input data for assigned plants (plants they own)
+        if user.is_general_user:
+            if not plant:
+                raise ValidationError({'plant': 'Plant is required for General Users'})
+            # Check if user is in plant.owners (ManyToMany) or plant.owner (legacy)
+            if user not in plant.owners.all() and plant.owner != user:
+                raise ValidationError(
+                    {'plant': 'You can only input data for plants assigned to you'}
+                )
+        
+        water_analysis = serializer.save(user=user)
         water_analysis.calculate_indices()
         try:
             water_analysis._generate_recommendations()

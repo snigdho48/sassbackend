@@ -54,8 +54,10 @@ class Plant(models.Model):
     """Plant model to store plant-specific parameters and ranges for water analysis."""
     name = models.CharField(max_length=100, unique=True)
     is_active = models.BooleanField(default=True)
-    # User who owns/responsible for this plant
-    owner = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='owned_plants')
+    # Multiple users can be assigned to a single plant
+    owners = models.ManyToManyField(User, blank=True, related_name='owned_plants', help_text='Users assigned to this plant')
+    # Keep owner field for backward compatibility during migration
+    owner = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='owned_plants_legacy')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -73,6 +75,8 @@ class Plant(models.Model):
     cooling_cycle_enabled = models.BooleanField(default=False, help_text="Enable cycle of concentration monitoring for this plant")
     cooling_iron_max = models.DecimalField(max_digits=4, decimal_places=1, default=3.0)
     cooling_iron_enabled = models.BooleanField(default=False, help_text="Enable iron monitoring for this plant")
+    cooling_phosphate_max = models.DecimalField(max_digits=6, decimal_places=2, default=10.0)
+    cooling_phosphate_enabled = models.BooleanField(default=False, help_text="Enable phosphate monitoring for this plant")
     
     # Plant-specific parameter ranges for boiler water
     boiler_ph_min = models.DecimalField(max_digits=4, decimal_places=2, default=10.5)
@@ -90,28 +94,27 @@ class Plant(models.Model):
     boiler_oh_alkalinity_min = models.DecimalField(max_digits=6, decimal_places=2, default=700)
     boiler_oh_alkalinity_max = models.DecimalField(max_digits=6, decimal_places=2, default=900)
     boiler_oh_alkalinity_enabled = models.BooleanField(default=False, help_text="Enable OH-alkalinity monitoring for this plant")
-    boiler_sulfite_min = models.DecimalField(max_digits=6, decimal_places=2, default=30)
-    boiler_sulfite_max = models.DecimalField(max_digits=6, decimal_places=2, default=60)
-    boiler_sulfite_enabled = models.BooleanField(default=False, help_text="Enable sulfite monitoring for this plant")
-    boiler_chlorides_max = models.DecimalField(max_digits=6, decimal_places=2, default=200)
-    boiler_chlorides_enabled = models.BooleanField(default=False, help_text="Enable chlorides monitoring for this plant")
+    boiler_sulphite_min = models.DecimalField(max_digits=6, decimal_places=2, default=30)
+    boiler_sulphite_max = models.DecimalField(max_digits=6, decimal_places=2, default=60)
+    boiler_sulphite_enabled = models.BooleanField(default=False, help_text="Enable sulphite monitoring for this plant")
+    boiler_sodium_chloride_max = models.DecimalField(max_digits=6, decimal_places=2, default=200)
+    boiler_sodium_chloride_enabled = models.BooleanField(default=False, help_text="Enable sodium chloride monitoring for this plant")
+    boiler_do_min = models.DecimalField(max_digits=6, decimal_places=2, default=0.0)
+    boiler_do_max = models.DecimalField(max_digits=6, decimal_places=2, default=0.05)
+    boiler_do_enabled = models.BooleanField(default=False, help_text="Enable dissolved oxygen monitoring for this plant")
+    boiler_phosphate_min = models.DecimalField(max_digits=6, decimal_places=2, default=2.0)
+    boiler_phosphate_max = models.DecimalField(max_digits=6, decimal_places=2, default=10.0)
+    boiler_phosphate_enabled = models.BooleanField(default=False, help_text="Enable phosphate monitoring for this plant")
     boiler_iron_max = models.DecimalField(max_digits=4, decimal_places=1, default=5.0)
     boiler_iron_enabled = models.BooleanField(default=False, help_text="Enable iron monitoring for this plant")
     
-    # LSI and RSI parameters (for both cooling and boiler water)
+    # LSI and RSI parameters (for cooling water only - removed from boiler per requirements)
     cooling_lsi_min = models.DecimalField(max_digits=4, decimal_places=1, default=-2.0)
     cooling_lsi_max = models.DecimalField(max_digits=4, decimal_places=1, default=2.0)
     cooling_lsi_enabled = models.BooleanField(default=False, help_text="Enable LSI monitoring for cooling water")
     cooling_rsi_min = models.DecimalField(max_digits=4, decimal_places=1, default=6.0)
     cooling_rsi_max = models.DecimalField(max_digits=4, decimal_places=1, default=7.0)
     cooling_rsi_enabled = models.BooleanField(default=False, help_text="Enable RSI monitoring for cooling water")
-    
-    boiler_lsi_min = models.DecimalField(max_digits=4, decimal_places=1, default=-2.0)
-    boiler_lsi_max = models.DecimalField(max_digits=4, decimal_places=1, default=2.0)
-    boiler_lsi_enabled = models.BooleanField(default=False, help_text="Enable LSI monitoring for boiler water")
-    boiler_rsi_min = models.DecimalField(max_digits=4, decimal_places=1, default=6.0)
-    boiler_rsi_max = models.DecimalField(max_digits=4, decimal_places=1, default=7.0)
-    boiler_rsi_enabled = models.BooleanField(default=False, help_text="Enable RSI monitoring for boiler water")
     
     class Meta:
         ordering = ['name']
@@ -135,6 +138,8 @@ class Plant(models.Model):
             params['cycle'] = {'min': self.cooling_cycle_min, 'max': self.cooling_cycle_max}
         if self.cooling_iron_enabled:
             params['iron'] = {'max': self.cooling_iron_max}
+        if self.cooling_phosphate_enabled:
+            params['phosphate'] = {'max': self.cooling_phosphate_max}
         if self.cooling_lsi_enabled:
             params['lsi'] = {'min': self.cooling_lsi_min, 'max': self.cooling_lsi_max}
         if self.cooling_rsi_enabled:
@@ -156,16 +161,17 @@ class Plant(models.Model):
             params['p_alkalinity'] = {'min': self.boiler_p_alkalinity_min, 'max': self.boiler_p_alkalinity_max}
         if self.boiler_oh_alkalinity_enabled:
             params['oh_alkalinity'] = {'min': self.boiler_oh_alkalinity_min, 'max': self.boiler_oh_alkalinity_max}
-        if self.boiler_sulfite_enabled:
-            params['sulfite'] = {'min': self.boiler_sulfite_min, 'max': self.boiler_sulfite_max}
-        if self.boiler_chlorides_enabled:
-            params['chlorides'] = {'max': self.boiler_chlorides_max}
+        if self.boiler_sulphite_enabled:
+            params['sulphite'] = {'min': self.boiler_sulphite_min, 'max': self.boiler_sulphite_max}
+        if self.boiler_sodium_chloride_enabled:
+            params['sodium_chloride'] = {'max': self.boiler_sodium_chloride_max}
+        if self.boiler_do_enabled:
+            params['do'] = {'min': self.boiler_do_min, 'max': self.boiler_do_max}
+        if self.boiler_phosphate_enabled:
+            params['phosphate'] = {'min': self.boiler_phosphate_min, 'max': self.boiler_phosphate_max}
         if self.boiler_iron_enabled:
             params['iron'] = {'max': self.boiler_iron_max}
-        if self.boiler_lsi_enabled:
-            params['lsi'] = {'min': self.boiler_lsi_min, 'max': self.boiler_lsi_max}
-        if self.boiler_rsi_enabled:
-            params['rsi'] = {'min': self.boiler_rsi_min, 'max': self.boiler_rsi_max}
+        # Note: LSI and RSI are removed from boiler water analysis per feedback
             
         return params
 
@@ -189,9 +195,18 @@ class WaterAnalysis(models.Model):
     temperature = models.DecimalField(max_digits=4, decimal_places=1, help_text="Hot Side Temperature (°C)", null=True, blank=True)
     basin_temperature = models.DecimalField(max_digits=4, decimal_places=1, help_text="Basin Temperature (°C)", null=True, blank=True)
     sulphate = models.DecimalField(max_digits=6, decimal_places=2, help_text="Sulphate (ppm)", null=True, blank=True)
+    cycle = models.DecimalField(max_digits=4, decimal_places=1, help_text="Cycle of Concentration", null=True, blank=True)
+    iron = models.DecimalField(max_digits=6, decimal_places=2, help_text="Iron (ppm)", null=True, blank=True)
+    phosphate = models.DecimalField(max_digits=6, decimal_places=2, help_text="Phosphate (ppm)", null=True, blank=True)  # For cooling water
     
     # Boiler Water Specific Parameters
     m_alkalinity = models.DecimalField(max_digits=6, decimal_places=2, help_text="M-Alkalinity as CaCO₃ (ppm)", null=True, blank=True)
+    p_alkalinity = models.DecimalField(max_digits=6, decimal_places=2, help_text="P-Alkalinity as CaCO₃ (ppm)", null=True, blank=True)
+    oh_alkalinity = models.DecimalField(max_digits=6, decimal_places=2, help_text="OH-Alkalinity as CaCO₃ (ppm)", null=True, blank=True)
+    sulphite = models.DecimalField(max_digits=6, decimal_places=2, help_text="Sulphite (ppm)", null=True, blank=True)  # Changed from sulfite
+    sodium_chloride = models.DecimalField(max_digits=6, decimal_places=2, help_text="Sodium Chloride (ppm)", null=True, blank=True)  # Changed from chlorides
+    do = models.DecimalField(max_digits=6, decimal_places=3, help_text="Dissolved Oxygen (ppm)", null=True, blank=True)  # New field
+    boiler_phosphate = models.DecimalField(max_digits=6, decimal_places=2, help_text="Phosphate (ppm)", null=True, blank=True)  # For boiler water
     
     # Calculated Indices
     lsi = models.DecimalField(max_digits=6, decimal_places=3, null=True, blank=True)

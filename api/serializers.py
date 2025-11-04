@@ -7,21 +7,43 @@ from reports.models import ReportTemplate, GeneratedReport
 from dashboard.models import DashboardWidget, UserPreference
 
 class UserSerializer(serializers.ModelSerializer):
+    role_display = serializers.CharField(source='get_role_display', read_only=True)
+    is_super_admin = serializers.ReadOnlyField()
+    is_admin = serializers.ReadOnlyField()
+    is_general_user = serializers.ReadOnlyField()
+    can_create_plants = serializers.ReadOnlyField()
+    can_create_admin_users = serializers.ReadOnlyField()
+    can_create_general_users = serializers.ReadOnlyField()
+    can_change_target_range = serializers.ReadOnlyField()
+    assigned_admin = serializers.PrimaryKeyRelatedField(read_only=True)
+    assigned_admin_email = serializers.CharField(source='assigned_admin.email', read_only=True)
+    
     class Meta:
         model = CustomUser
-        fields = ('id', 'email', 'username', 'first_name', 'last_name', 'role', 'company', 'phone', 'date_joined', 'last_login')
-        read_only_fields = ('id', 'date_joined', 'last_login')
+        fields = (
+            'id', 'email', 'username', 'first_name', 'last_name', 'role', 'role_display',
+            'company', 'phone', 'date_joined', 'last_login', 'assigned_admin', 'assigned_admin_email',
+            'is_super_admin', 'is_admin', 'is_general_user',
+            'can_create_plants', 'can_create_admin_users', 'can_create_general_users',
+            'can_change_target_range'
+        )
+        read_only_fields = ('id', 'date_joined', 'last_login', 'role_display', 'assigned_admin_email')
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, validators=[validate_password])
     password2 = serializers.CharField(write_only=True)
-    role = serializers.CharField(default='client', required=False)
+    role = serializers.CharField(default='general_user', required=False)
     phone = serializers.CharField(required=False, allow_blank=True)
     company = serializers.CharField(required=False, allow_blank=True)
+    assigned_admin = serializers.PrimaryKeyRelatedField(
+        queryset=CustomUser.objects.filter(role__in=[CustomUser.UserRole.ADMIN, CustomUser.UserRole.SUPER_ADMIN]),
+        required=False,
+        allow_null=True
+    )
 
     class Meta:
         model = CustomUser
-        fields = ('email', 'username', 'first_name', 'last_name', 'password', 'password2', 'company', 'phone', 'role')
+        fields = ('email', 'username', 'first_name', 'last_name', 'password', 'password2', 'company', 'phone', 'role', 'assigned_admin')
 
     def validate(self, attrs):
         if attrs['password'] != attrs['password2']:
@@ -206,8 +228,9 @@ class WaterAnalysisSerializer(serializers.ModelSerializer):
         model = WaterAnalysis
         fields = [
             'id', 'analysis_name', 'analysis_date', 'plant', 'analysis_type', 'ph', 'tds', 'total_alkalinity', 
-            'hardness', 'chloride', 'temperature', 'basin_temperature', 'sulphate',
-            'm_alkalinity', 'lsi', 'rsi', 'psi', 'lr', 'stability_score',
+            'hardness', 'chloride', 'temperature', 'basin_temperature', 'sulphate', 'cycle', 'iron', 'phosphate',
+            'm_alkalinity', 'p_alkalinity', 'oh_alkalinity', 'sulphite', 'sodium_chloride', 'do', 'boiler_phosphate',
+            'lsi', 'rsi', 'psi', 'lr', 'stability_score',
             'lsi_status', 'rsi_status', 'psi_status', 'lr_status', 'overall_status', 
             'notes', 'created_at', 'updated_at'
         ]
@@ -238,12 +261,22 @@ class PlantListSerializer(serializers.ModelSerializer):
 
 class PlantDetailSerializer(serializers.ModelSerializer):
     """Full serializer for plant details - includes all parameters"""
-    owner = UserSerializer(read_only=True)
+    owner = UserSerializer(read_only=True)  # Legacy field for backward compatibility
     owner_id = serializers.PrimaryKeyRelatedField(
         write_only=True, 
-        queryset=CustomUser.objects.all(),
-        required=True,
+        queryset=CustomUser.objects.filter(role__in=[CustomUser.UserRole.ADMIN]),
+        required=False,
+        allow_null=True,
         source='owner'
+    )
+    owners = UserSerializer(many=True, read_only=True)
+    owner_ids = serializers.PrimaryKeyRelatedField(
+        many=True,
+        write_only=True,
+        queryset=CustomUser.objects.all(),
+        required=False,
+        allow_null=True,
+        source='owners'
     )
     
     class Meta:
@@ -257,15 +290,17 @@ class PlantDetailSerializer(serializers.ModelSerializer):
             'cooling_chloride_enabled',
             'cooling_cycle_enabled', 
             'cooling_iron_enabled',
+            'cooling_phosphate_enabled',
             'cooling_lsi_enabled',
             'cooling_rsi_enabled',
             'boiler_p_alkalinity_enabled',
             'boiler_oh_alkalinity_enabled',
-            'boiler_sulfite_enabled',
-            'boiler_chlorides_enabled',
-            'boiler_iron_enabled',
-            'boiler_lsi_enabled',
-            'boiler_rsi_enabled'
+            'boiler_sulphite_enabled',
+            'boiler_sodium_chloride_enabled',
+            'boiler_do_enabled',
+            'boiler_phosphate_enabled',
+            'boiler_iron_enabled'
+            # Note: boiler_lsi_enabled and boiler_rsi_enabled removed per requirements
         ]
         
         for field in boolean_fields:

@@ -42,6 +42,7 @@ urlpatterns = [
     path('plants-management/', views.PlantManagementViewSet.as_view({'get': 'list', 'post': 'create'}), name='plants_management'),
     path('plants-management/<int:pk>/', views.PlantManagementViewSet.as_view({'get': 'retrieve', 'put': 'update', 'patch': 'partial_update', 'delete': 'destroy'}), name='plants_management_detail'),
     path('plants-management/users/', views.PlantManagementViewSet.as_view({'get': 'users'}), name='plants_management_users'),
+    path('plants-management/admin-users/', views.PlantManagementViewSet.as_view({'get': 'admin_users'}), name='plants_management_admin_users'),
     
     # Water Analysis endpoints
     path('water-analysis/', views.WaterAnalysisViewSet.as_view({'get': 'list', 'post': 'create'}), name='water_analysis'),
