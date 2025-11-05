@@ -23,7 +23,7 @@ class UserSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'email', 'username', 'first_name', 'last_name', 'role', 'role_display',
             'company', 'phone', 'date_joined', 'last_login', 'assigned_admin', 'assigned_admin_email',
-            'is_super_admin', 'is_admin', 'is_general_user',
+            'is_active', 'is_super_admin', 'is_admin', 'is_general_user',
             'can_create_plants', 'can_create_admin_users', 'can_create_general_users',
             'can_change_target_range'
         )
@@ -52,7 +52,8 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data.pop('password2')
-        # Ensure new users are created as active by default
+        # Ensure new users (admin and general users) are ALWAYS created as active by default
+        # This overrides any attempt to set is_active=False
         validated_data['is_active'] = True
         user = CustomUser.objects.create_user(**validated_data)
         return user
@@ -76,7 +77,8 @@ class LoginSerializer(serializers.Serializer):
             )
             if not user:
                 raise serializers.ValidationError('Invalid email or password.')
-            if not user.is_active:
+            # Super Admin can always login even if inactive
+            if not user.is_active and not user.is_super_admin:
                 raise serializers.ValidationError('User account is disabled.')
         else:
             raise serializers.ValidationError('Must include "email" and "password".')
