@@ -704,6 +704,8 @@ class AdminUserManagementView(APIView):
                         status=status.HTTP_400_BAD_REQUEST
                     )
         
+        # Ensure new users are created as active by default
+        request.data['is_active'] = True
         serializer = UserRegistrationSerializer(data=request.data)
         if serializer.is_valid():
             created_user = serializer.save()

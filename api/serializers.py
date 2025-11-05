@@ -52,6 +52,8 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data.pop('password2')
+        # Ensure new users are created as active by default
+        validated_data['is_active'] = True
         user = CustomUser.objects.create_user(**validated_data)
         return user
 
