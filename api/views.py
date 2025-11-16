@@ -1618,22 +1618,32 @@ def calculate_water_analysis_with_recommendations_view(request):
             except Plant.DoesNotExist:
                 return Response({'error': 'Plant not found'}, status=status.HTTP_404_NOT_FOUND)
         
-        # Check analysis type and extract only required parameters
+        # Helper to parse safely without defaults
+        def _f(val):
+            if val is None or val == "":
+                return None
+            try:
+                return float(val)
+            except Exception:
+                return None
+
+        # Check analysis type and extract only provided parameters (no defaults)
         if analysis_type == 'boiler':
-            # For boiler water, only extract the 4 required fields
-            ph = float(request.data.get('ph', 0))
-            tds = float(request.data.get('tds', 0))
-            hardness = float(request.data.get('hardness', 0))
-            m_alkalinity = float(request.data.get('m_alkalinity', 0))
+            ph = _f(request.data.get('ph'))
+            tds = _f(request.data.get('tds'))
+            hardness = _f(request.data.get('hardness'))
+            m_alkalinity = _f(request.data.get('m_alkalinity'))
         else:
-            # For cooling water, extract all required fields
-            ph = float(request.data.get('ph', 0))
-            tds = float(request.data.get('tds', 0))
-            total_alkalinity = float(request.data.get('total_alkalinity', 0))
-            hardness = float(request.data.get('hardness', 0))
-            chloride = float(request.data.get('chloride', 0))
-            temperature = float(request.data.get('temperature', 0))
-            sulphate = float(request.data.get('sulphate', 0))  # New parameter for LR calculation
+            ph = _f(request.data.get('ph'))
+            tds = _f(request.data.get('tds'))
+            total_alkalinity = _f(request.data.get('total_alkalinity'))
+            hardness = _f(request.data.get('hardness'))
+            chloride = _f(request.data.get('chloride'))
+            # Prefer hot side temperature if provided; fallback to basin temperature
+            hot_temperature = _f(request.data.get('hot_temperature'))
+            basin_temperature = _f(request.data.get('temperature'))
+            temperature = hot_temperature if hot_temperature is not None else basin_temperature
+            sulphate = _f(request.data.get('sulphate'))
         
         # Check analysis type and calculate accordingly
         if analysis_type == 'boiler':
@@ -1641,67 +1651,46 @@ def calculate_water_analysis_with_recommendations_view(request):
             # Start score: 100 points
             stability_score = 100
             
-            # Get plant-specific parameters or use defaults
+            # Get plant-specific parameters or use defaults, handling missing keys gracefully
             if plant:
                 boiler_params = plant.get_boiler_parameters()
-                ph_min = float(boiler_params['ph']['min'])
-                ph_max = float(boiler_params['ph']['max'])
-                tds_min = float(boiler_params['tds']['min'])
-                tds_max = float(boiler_params['tds']['max'])
-                hardness_max = float(boiler_params['hardness']['max'])
-                alk_min = float(boiler_params['alkalinity']['min'])
-                alk_max = float(boiler_params['alkalinity']['max'])
+                ph_min = float(boiler_params.get('ph', {}).get('min')) if boiler_params.get('ph') else None
+                ph_max = float(boiler_params.get('ph', {}).get('max')) if boiler_params.get('ph') else None
+                tds_min = float(boiler_params.get('tds', {}).get('min')) if boiler_params.get('tds') else None
+                tds_max = float(boiler_params.get('tds', {}).get('max')) if boiler_params.get('tds') else None
+                hardness_max = float(boiler_params.get('hardness', {}).get('max')) if boiler_params.get('hardness') else None
+                alk_min = float(boiler_params.get('alkalinity', {}).get('min')) if boiler_params.get('alkalinity') else None
+                alk_max = float(boiler_params.get('alkalinity', {}).get('max')) if boiler_params.get('alkalinity') else None
             else:
-                # Default values
-                ph_min, ph_max = 10.5, 11.5
-                tds_min, tds_max = 2500, 3500
-                hardness_max = 2.0
-                alk_min, alk_max = 600, 1400
+                ph_min = ph_max = tds_min = tds_max = hardness_max = alk_min = alk_max = None
+            # No defaults: if a range is not configured, skip that parameter's deduction entirely
             
-            # pH: Ideal Range based on plant parameters
-            if ph_min <= ph <= ph_max:
-                # pH is in ideal range, no deduction
-                pass
-            else:
-                # Calculate deviation and deduct points (5 points per 0.1 deviation)
-                if ph < ph_min:
-                    deviation = ph_min - ph
-                else:
-                    deviation = ph - ph_max
-                points_to_deduct = min((deviation / 0.1) * 5, 30)  # Cap at 30 points
-                stability_score -= points_to_deduct
+            # pH deduction only when value and bounds are provided
+            if ph is not None and ph_min is not None and ph_max is not None:
+                if not (ph_min <= ph <= ph_max):
+                    deviation = (ph_min - ph) if ph < ph_min else (ph - ph_max)
+                    points_to_deduct = min((deviation / 0.1) * 5, 30)
+                    stability_score -= points_to_deduct
             
-            # TDS: Ideal Range based on plant parameters
-            if tds_min <= tds <= tds_max:
-                # TDS is in ideal range, no deduction
-                pass
-            else:
-                if tds > tds_max * 1.15:  # 15% above max
-                    stability_score -= 20  # Subtract 20 points if > 15% above max
-                else:
-                    stability_score -= 10  # Subtract 10 points if outside ideal range
+            # TDS deduction only when value and bounds are provided
+            if tds is not None and tds_min is not None and tds_max is not None:
+                if not (tds_min <= tds <= tds_max):
+                    if tds > tds_max * 1.15:
+                        stability_score -= 20
+                    else:
+                        stability_score -= 10
             
-            # Hardness: Ideal Range based on plant parameters
-            if hardness <= hardness_max:
-                # Hardness is in ideal range, no deduction
-                pass
-            elif hardness <= hardness_max * 2.5:  # 2.5x max
-                stability_score -= 10  # Subtract 10 points if 2.5x max
-            else:
-                stability_score -= 20  # Subtract 20 points if > 2.5x max
+            # Hardness deduction only when value and bound are provided
+            if hardness is not None and hardness_max is not None:
+                if hardness > hardness_max:
+                    stability_score -= 10 if hardness <= hardness_max * 2.5 else 20
             
-            # M-Alk: Ideal Range based on plant parameters
-            if alk_min <= m_alkalinity <= alk_max:
-                # M-Alk is in ideal range, no deduction
-                pass
-            else:
-                # Calculate deviation from ideal range and deduct points
-                if m_alkalinity < alk_min:
-                    deviation = alk_min - m_alkalinity
-                else:
-                    deviation = m_alkalinity - alk_max
-                points_to_deduct = (deviation / 50) * 2
-                stability_score -= points_to_deduct
+            # M-Alkalinity deduction only when value and bounds are provided
+            if m_alkalinity is not None and alk_min is not None and alk_max is not None:
+                if not (alk_min <= m_alkalinity <= alk_max):
+                    deviation = (alk_min - m_alkalinity) if m_alkalinity < alk_min else (m_alkalinity - alk_max)
+                    points_to_deduct = (deviation / 50) * 2
+                    stability_score -= points_to_deduct
             
             # Cap score between 0 and 100
             stability_score = max(0, min(100, stability_score))
@@ -1772,7 +1761,7 @@ def calculate_water_analysis_with_recommendations_view(request):
                 'recommendations': boiler_recommendations
             })
         
-        # Cooling Water Analysis - Calculate indices directly without saving to database
+        # Cooling Water Analysis - Calculate indices with optional parameters
         # LSI calculation using the formulae from the document
         # A = (Log10(TDS)-1)/10
         # B = -13.12 x Log10(Temp (oC)+273) + 34.55
@@ -1780,31 +1769,27 @@ def calculate_water_analysis_with_recommendations_view(request):
         # D = Log10(Alk as CaCO3)
         # pHs = 9.3 + A + B - C - D
         
+        lsi = None
+        rsi = None
+        psi = None
+        lr = None
         if tds > 0 and temperature > 0 and hardness > 0 and total_alkalinity > 0:
             A = (math.log10(tds) - 1) / 10
             B = -13.12 * math.log10(temperature + 273) + 34.55
             C = math.log10(hardness) - 0.4
             D = math.log10(total_alkalinity)
             phs = 9.3 + A + B - C - D
-        else:
-            # Fallback calculation if any parameter is missing
-            temp_factor = 0.1 * (temperature - 25)
-            tds_factor = 0.01 * (tds - 150)
-            phs = 9.3 + temp_factor + tds_factor
-        
-        lsi = ph - phs
-        
-        # RSI calculation
-        rsi = 2 * phs - ph
+            lsi = ph - phs
+            rsi = 2 * phs - ph
         
         # PSI calculation (Puckorius Scaling Index)
         # pHe = 1.465 + Log10(Alk as CaCO3) + 4.54
         # PSI = 2 x pHe - pHs
-        if total_alkalinity > 0:
+        if total_alkalinity > 0 and temperature > 0:
             pHe = 1.465 + math.log10(total_alkalinity) + 4.54
             psi = 2 * pHe - phs
         else:
-            psi = 0
+            psi = None
         
         # LR calculation (Langelier Ratio) - EXACTLY as in the image
         # epm Cl = Chloride as Cl / 35.5
@@ -1812,7 +1797,8 @@ def calculate_water_analysis_with_recommendations_view(request):
         # Molar Alkalinity, [Alk] = Total Alk as CaCO3 / 100
         # K1 and K2 are temperature-dependent equilibrium constants from the image
         # LR = [epm Cl + epm SO4] / [epm HCO3 + epm CO3]
-        if total_alkalinity > 0 and (chloride > 0 or sulphate > 0):
+        use_chloride = bool(plant and plant.cooling_chloride_enabled)
+        if total_alkalinity > 0 and ((use_chloride and (chloride > 0 or sulphate > 0)) or (not use_chloride and sulphate > 0)):
             # Calculate equilibrium constants K1 and K2 using EXACT formulae from image
             if temperature > 0:
                 # EXACT formulae from the image:
@@ -1872,10 +1858,9 @@ def calculate_water_analysis_with_recommendations_view(request):
                 elif lr > 100:  # Additional safety check for extremely large values
                     lr = 5.0   # Set to high corrosion risk
             else:
-                # If carbonate speciation is effectively zero, set LR to indicate high corrosion risk
-                lr = 2.0  # This represents high corrosion risk per the image interpretation
+                lr = None
         else:
-            lr = 0
+            lr = None
         
         # Determine status for all indices based on EXACT ranges from the images
         # LSI status based on EXACT ranges from first image:
@@ -1885,7 +1870,9 @@ def calculate_water_analysis_with_recommendations_view(request):
         # 0 to 0.5: Near Balance
         # 1: Moderate Scale Forming
         # 2 to 4: Severe Scale Forming
-        if lsi <= -2:
+        if lsi is None:
+            lsi_status = ""
+        elif lsi <= -2:
             lsi_status = "Severe to Moderate Corrosion"
         elif lsi <= -1:
             lsi_status = "Mild Corrosion"
@@ -1903,7 +1890,9 @@ def calculate_water_analysis_with_recommendations_view(request):
         # 7.0 - 7.5: Corrosion significant
         # 7.5 - 9.0: Heavy corrosion
         # > 9.0: Intolerable corrosion
-        if rsi < 5.0:
+        if rsi is None:
+            rsi_status = ""
+        elif rsi < 5.0:
             rsi_status = "Heavy scale"
         elif rsi < 6.0:
             rsi_status = "Light scale"
@@ -1922,7 +1911,9 @@ def calculate_water_analysis_with_recommendations_view(request):
         # PSI < 4.5: Water has a tendency to scale
         # PSI 4.5 - 6.5: Water is in optimal range with no corrosion or scaling
         # PSI > 6.5: Water has a tendency to corrode
-        if psi < 4.5:
+        if psi is None:
+            psi_status = ""
+        elif psi < 4.5:
             psi_status = "Water has a tendency to scale"
         elif 4.5 <= psi <= 6.5:
             psi_status = "Water is in optimal range with no corrosion or scaling"
@@ -1933,55 +1924,107 @@ def calculate_water_analysis_with_recommendations_view(request):
         # LR < 0.8: Chlorides and sulfate probably will not interfere with natural film formation
         # LR 0.8 < 1.2: Chlorides and sulfates may interfere with natural film formation. Higher than desired corrosion rates might be anticipated.
         # LR > 1.2: The tendency towards high corrosion rates of a local type should be expected as the index increases.
-        if lr < 0.8:
+        if lr is None:
+            lr_status = ""
+        elif lr < 0.8:
             lr_status = "Chlorides and sulfate probably will not interfere with natural film formation"
         elif 0.8 <= lr <= 1.2:
             lr_status = "Chlorides and sulfates may interfere with natural film formation. Higher than desired corrosion rates might be anticipated."
         else:
             lr_status = "The tendency towards high corrosion rates of a local type should be expected as the index increases"
         
-        # Overall status calculation including new indices based on EXACT status descriptions
-        lsi_score = 1 if lsi_status == "Near Balance" else 0
-        rsi_score = 1 if rsi_status == "Little scale or corrosion" else 0
-        psi_score = 1 if psi_status == "Water is in optimal range with no corrosion or scaling" else 0
-        lr_score = 1 if lr_status == "Chlorides and sulfate probably will not interfere with natural film formation" else (0.5 if lr_status == "Chlorides and sulfates may interfere with natural film formation. Higher than desired corrosion rates might be anticipated." else 0)
-        total_score = lsi_score + rsi_score + psi_score + lr_score
-        
-        overall_status = "Stable" if total_score >= 3 else ("Moderate" if total_score >= 2 else "Unstable")
-        
-        # Calculate stability score (0-100) including new indices based on EXACT status descriptions
-        base_score = 50
-        if lsi_status == "Near Balance":
-            base_score += 15
-        elif lsi_status in ["Moderate Scale Forming", "Severe Scale Forming"]:
-            base_score -= 8
-        elif lsi_status in ["Mild Corrosion", "Severe to Moderate Corrosion"]:
-            base_score -= 15
-        
-        if rsi_status == "Little scale or corrosion":
-            base_score += 15
-        elif rsi_status in ["Heavy scale", "Light scale"]:
-            base_score -= 8
-        elif rsi_status in ["Corrosion significant", "Heavy corrosion", "Intolerable corrosion"]:
-            base_score -= 15
-        
+        # Overall status and stability score using ALL available signals (indices + direct param-to-target checks)
+        # Map statuses to component scores in [0,1]
+        def score_lsi(status):
+            if not status: return None
+            return 1.0 if status == "Near Balance" else 0.5 if status in ["Moderate Scale Forming", "Mild Corrosion"] else 0.0
+        def score_rsi(status):
+            if not status: return None
+            return 1.0 if status == "Little scale or corrosion" else 0.5 if status in ["Light scale", "Corrosion significant"] else 0.0
+        def score_psi(status):
+            if not status: return None
+            return 1.0 if status == "Water is in optimal range with no corrosion or scaling" else 0.0
+        def score_lr(status):
+            if not status: return None
+            return 1.0 if status == "Chlorides and sulfate probably will not interfere with natural film formation" else 0.5 if status == "Chlorides and sulfates may interfere with natural film formation. Higher than desired corrosion rates might be anticipated." else 0.0
 
-        
-        if psi_status == "Water is in optimal range with no corrosion or scaling":
-            base_score += 12
-        elif psi_status == "Water has a tendency to scale":
-            base_score -= 6
-        elif psi_status == "Water has a tendency to corrode":
-            base_score -= 12
-        
-        if lr_status == "Chlorides and sulfate probably will not interfere with natural film formation":
-            base_score += 10
-        elif lr_status == "Chlorides and sulfates may interfere with natural film formation. Higher than desired corrosion rates might be anticipated.":
-            base_score += 5
-        elif lr_status == "The tendency towards high corrosion rates of a local type should be expected as the index increases":
-            base_score -= 10
-        
-        stability_score = max(0, min(100, base_score))
+        components = []
+        direct_components = []  # when plant targets exist, prefer these for scoring
+        s_lsi = score_lsi(lsi_status);   components.append(s_lsi)
+        s_rsi = score_rsi(rsi_status);   components.append(s_rsi)
+        s_psi = score_psi(psi_status);   components.append(s_psi)
+        s_lr  = score_lr(lr_status);     components.append(s_lr)
+        # Add direct adherence components for any configured plant targets
+        cooling_targets = plant.get_cooling_parameters() if plant else {}
+        # pH
+        if cooling_targets.get('ph') and ph is not None:
+            _min, _max = cooling_targets['ph'].get('min'), cooling_targets['ph'].get('max')
+            if _min is not None and _max is not None:
+                direct_components.append(1.0 if _min <= ph <= _max else 0.0)
+        # TDS
+        if cooling_targets.get('tds') and tds is not None:
+            _min, _max = cooling_targets['tds'].get('min'), cooling_targets['tds'].get('max')
+            if _min is not None and _max is not None:
+                direct_components.append(1.0 if _min <= tds <= _max else 0.0)
+        # Hardness
+        if cooling_targets.get('hardness') and hardness is not None:
+            _max = cooling_targets['hardness'].get('max')
+            if _max is not None:
+                direct_components.append(1.0 if hardness <= _max else 0.0)
+        # Alkalinity
+        if cooling_targets.get('alkalinity') and total_alkalinity is not None:
+            _max = cooling_targets['alkalinity'].get('max')
+            if _max is not None:
+                direct_components.append(1.0 if total_alkalinity <= _max else 0.0)
+        # Chloride
+        if cooling_targets.get('chloride') and chloride is not None:
+            _max = cooling_targets['chloride'].get('max')
+            if _max is not None:
+                direct_components.append(1.0 if chloride <= _max else 0.0)
+        # LSI
+        if cooling_targets.get('lsi') and lsi is not None:
+            _min, _max = cooling_targets['lsi'].get('min'), cooling_targets['lsi'].get('max')
+            if _min is not None and _max is not None:
+                direct_components.append(1.0 if _min <= lsi <= _max else 0.0)
+        # RSI
+        if cooling_targets.get('rsi') and rsi is not None:
+            _min, _max = cooling_targets['rsi'].get('min'), cooling_targets['rsi'].get('max')
+            if _min is not None and _max is not None:
+                direct_components.append(1.0 if _min <= rsi <= _max else 0.0)
+        # Cycle
+        if cooling_targets.get('cycle'):
+            try:
+                _cycle_val = float(request.data.get('cycle')) if request.data.get('cycle') not in [None, ""] else None
+            except Exception:
+                _cycle_val = None
+            if _cycle_val is not None:
+                _min, _max = cooling_targets['cycle'].get('min'), cooling_targets['cycle'].get('max')
+                if _min is not None and _max is not None:
+                    direct_components.append(1.0 if _min <= _cycle_val <= _max else 0.0)
+        # Iron
+        if cooling_targets.get('iron'):
+            try:
+                _iron_val = float(request.data.get('iron')) if request.data.get('iron') not in [None, ""] else None
+            except Exception:
+                _iron_val = None
+            if _iron_val is not None:
+                _max = cooling_targets['iron'].get('max')
+                if _max is not None:
+                    direct_components.append(1.0 if _iron_val <= _max else 0.0)
+
+        available = [s for s in components if s is not None]
+        direct_available = [s for s in direct_components if s is not None]
+        if len(available) == 0:
+            stability_score = 100.0  # nothing to judge → neutral best
+            overall_status = "Stable"
+        else:
+            # Prefer plant target adherence when present; otherwise use index-based signals
+            if len(direct_available) > 0:
+                avg = sum(direct_available) / len(direct_available)
+            else:
+                avg = sum(available) / len(available)
+            stability_score = max(0, min(100, avg * 100.0))
+            overall_status = "Stable" if avg >= 0.7 else ("Moderate" if avg >= 0.5 else "Unstable")
         
         # Generate recommendations based on calculated results
         recommendations = []
@@ -2198,12 +2241,19 @@ def calculate_water_analysis_with_recommendations_view(request):
         # Sort by priority and creation date
         recommendations.sort(key=lambda x: (x['priority'] == 'high', str(x['created_at'])), reverse=True)
         
+        # Helper for safe rounding
+        def r2(x):
+            try:
+                return round(x, 2) if x is not None else None
+            except Exception:
+                return None
+
         return Response({
             'calculation': {
-                'lsi': round(lsi, 2),
-                'rsi': round(rsi, 2),
-                'lr': round(lr, 2),
-                'stability_score': round(stability_score, 2),
+                'lsi': r2(lsi),
+                'rsi': r2(rsi),
+                'lr': r2(lr),
+                'stability_score': r2(stability_score),
                 'lsi_status': lsi_status,
                 'rsi_status': rsi_status,
                 'lr_status': lr_status,

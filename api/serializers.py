@@ -287,8 +287,58 @@ class PlantDetailSerializer(serializers.ModelSerializer):
         model = Plant
         fields = '__all__'
     
+    def __init__(self, *args, **kwargs):
+        """Make all fields optional except name"""
+        super().__init__(*args, **kwargs)
+        # Make all fields optional except name
+        for field_name, field in self.fields.items():
+            if field_name != 'name' and field_name not in ['owner', 'owners', 'owner_id', 'owner_ids', 'created_at', 'updated_at']:
+                field.required = False
+                field.allow_null = True
+    
     def validate(self, attrs):
-        """Ensure boolean fields have proper default values"""
+        """Validate that at least one parameter is provided when creating a new plant"""
+        # Check if this is a create operation (instance is None)
+        if self.instance is None:
+            # List of all parameter fields (excluding name, is_active, owners, and enabled flags)
+            parameter_fields = [
+                # Cooling water parameters
+                'cooling_ph_min', 'cooling_ph_max',
+                'cooling_tds_min', 'cooling_tds_max',
+                'cooling_hardness_max',
+                'cooling_alkalinity_max',
+                'cooling_chloride_max',
+                'cooling_cycle_min', 'cooling_cycle_max',
+                'cooling_iron_max',
+                'cooling_phosphate_max',
+                'cooling_lsi_min', 'cooling_lsi_max',
+                'cooling_rsi_min', 'cooling_rsi_max',
+                # Boiler water parameters
+                'boiler_ph_min', 'boiler_ph_max',
+                'boiler_tds_min', 'boiler_tds_max',
+                'boiler_hardness_max',
+                'boiler_alkalinity_min', 'boiler_alkalinity_max',
+                'boiler_p_alkalinity_min', 'boiler_p_alkalinity_max',
+                'boiler_oh_alkalinity_min', 'boiler_oh_alkalinity_max',
+                'boiler_sulphite_min', 'boiler_sulphite_max',
+                'boiler_sodium_chloride_max',
+                'boiler_do_min', 'boiler_do_max',
+                'boiler_phosphate_min', 'boiler_phosphate_max',
+                'boiler_iron_max',
+            ]
+            
+            # Check if at least one parameter field has a value
+            has_parameter = any(
+                attrs.get(field) is not None and attrs.get(field) != '' 
+                for field in parameter_fields
+            )
+            
+            if not has_parameter:
+                raise serializers.ValidationError(
+                    "At least one plant parameter must be provided. Please specify at least one cooling or boiler water parameter."
+                )
+        
+        # Ensure boolean fields have proper default values
         boolean_fields = [
             'is_active',
             'cooling_chloride_enabled',

@@ -61,59 +61,59 @@ class Plant(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
-    # Plant-specific parameter ranges for cooling water
-    cooling_ph_min = models.DecimalField(max_digits=4, decimal_places=2, default=6.5)
-    cooling_ph_max = models.DecimalField(max_digits=4, decimal_places=2, default=7.8)
-    cooling_tds_min = models.DecimalField(max_digits=6, decimal_places=2, default=500)
-    cooling_tds_max = models.DecimalField(max_digits=6, decimal_places=2, default=800)
-    cooling_hardness_max = models.DecimalField(max_digits=6, decimal_places=2, default=300)
-    cooling_alkalinity_max = models.DecimalField(max_digits=6, decimal_places=2, default=300)
-    cooling_chloride_max = models.DecimalField(max_digits=6, decimal_places=2, default=250)
+    # Plant-specific parameter ranges for cooling water (all optional)
+    cooling_ph_min = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+    cooling_ph_max = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+    cooling_tds_min = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    cooling_tds_max = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    cooling_hardness_max = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    cooling_alkalinity_max = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    cooling_chloride_max = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     cooling_chloride_enabled = models.BooleanField(default=False, help_text="Enable chloride monitoring for this plant")
-    cooling_cycle_min = models.DecimalField(max_digits=4, decimal_places=1, default=5.0)
-    cooling_cycle_max = models.DecimalField(max_digits=4, decimal_places=1, default=8.0)
+    cooling_cycle_min = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
+    cooling_cycle_max = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
     cooling_cycle_enabled = models.BooleanField(default=False, help_text="Enable cycle of concentration monitoring for this plant")
-    cooling_iron_max = models.DecimalField(max_digits=4, decimal_places=1, default=3.0)
+    cooling_iron_max = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
     cooling_iron_enabled = models.BooleanField(default=False, help_text="Enable iron monitoring for this plant")
-    cooling_phosphate_max = models.DecimalField(max_digits=6, decimal_places=2, default=10.0)
+    cooling_phosphate_max = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     cooling_phosphate_enabled = models.BooleanField(default=False, help_text="Enable phosphate monitoring for this plant")
     
-    # Plant-specific parameter ranges for boiler water
-    boiler_ph_min = models.DecimalField(max_digits=4, decimal_places=2, default=10.5)
-    boiler_ph_max = models.DecimalField(max_digits=4, decimal_places=2, default=11.5)
-    boiler_tds_min = models.DecimalField(max_digits=6, decimal_places=2, default=2500)
-    boiler_tds_max = models.DecimalField(max_digits=6, decimal_places=2, default=3500)
-    boiler_hardness_max = models.DecimalField(max_digits=4, decimal_places=1, default=2.0)
-    boiler_alkalinity_min = models.DecimalField(max_digits=6, decimal_places=2, default=600)
-    boiler_alkalinity_max = models.DecimalField(max_digits=6, decimal_places=2, default=1400)
+    # Plant-specific parameter ranges for boiler water (all optional)
+    boiler_ph_min = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+    boiler_ph_max = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+    boiler_tds_min = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    boiler_tds_max = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    boiler_hardness_max = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
+    boiler_alkalinity_min = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    boiler_alkalinity_max = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     
     # Boiler water optional parameters
-    boiler_p_alkalinity_min = models.DecimalField(max_digits=6, decimal_places=2, default=500)
-    boiler_p_alkalinity_max = models.DecimalField(max_digits=6, decimal_places=2, default=700)
+    boiler_p_alkalinity_min = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    boiler_p_alkalinity_max = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     boiler_p_alkalinity_enabled = models.BooleanField(default=False, help_text="Enable P-alkalinity monitoring for this plant")
-    boiler_oh_alkalinity_min = models.DecimalField(max_digits=6, decimal_places=2, default=700)
-    boiler_oh_alkalinity_max = models.DecimalField(max_digits=6, decimal_places=2, default=900)
+    boiler_oh_alkalinity_min = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    boiler_oh_alkalinity_max = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     boiler_oh_alkalinity_enabled = models.BooleanField(default=False, help_text="Enable OH-alkalinity monitoring for this plant")
-    boiler_sulphite_min = models.DecimalField(max_digits=6, decimal_places=2, default=30)
-    boiler_sulphite_max = models.DecimalField(max_digits=6, decimal_places=2, default=60)
+    boiler_sulphite_min = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    boiler_sulphite_max = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     boiler_sulphite_enabled = models.BooleanField(default=False, help_text="Enable sulphite monitoring for this plant")
-    boiler_sodium_chloride_max = models.DecimalField(max_digits=6, decimal_places=2, default=200)
+    boiler_sodium_chloride_max = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     boiler_sodium_chloride_enabled = models.BooleanField(default=False, help_text="Enable sodium chloride monitoring for this plant")
-    boiler_do_min = models.DecimalField(max_digits=6, decimal_places=2, default=0.0)
-    boiler_do_max = models.DecimalField(max_digits=6, decimal_places=2, default=0.05)
+    boiler_do_min = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    boiler_do_max = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     boiler_do_enabled = models.BooleanField(default=False, help_text="Enable dissolved oxygen monitoring for this plant")
-    boiler_phosphate_min = models.DecimalField(max_digits=6, decimal_places=2, default=2.0)
-    boiler_phosphate_max = models.DecimalField(max_digits=6, decimal_places=2, default=10.0)
+    boiler_phosphate_min = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    boiler_phosphate_max = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     boiler_phosphate_enabled = models.BooleanField(default=False, help_text="Enable phosphate monitoring for this plant")
-    boiler_iron_max = models.DecimalField(max_digits=4, decimal_places=1, default=5.0)
+    boiler_iron_max = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
     boiler_iron_enabled = models.BooleanField(default=False, help_text="Enable iron monitoring for this plant")
     
     # LSI and RSI parameters (for cooling water only - removed from boiler per requirements)
-    cooling_lsi_min = models.DecimalField(max_digits=4, decimal_places=1, default=-2.0)
-    cooling_lsi_max = models.DecimalField(max_digits=4, decimal_places=1, default=2.0)
+    cooling_lsi_min = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
+    cooling_lsi_max = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
     cooling_lsi_enabled = models.BooleanField(default=False, help_text="Enable LSI monitoring for cooling water")
-    cooling_rsi_min = models.DecimalField(max_digits=4, decimal_places=1, default=6.0)
-    cooling_rsi_max = models.DecimalField(max_digits=4, decimal_places=1, default=7.0)
+    cooling_rsi_min = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
+    cooling_rsi_max = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
     cooling_rsi_enabled = models.BooleanField(default=False, help_text="Enable RSI monitoring for cooling water")
     
     class Meta:
@@ -124,12 +124,17 @@ class Plant(models.Model):
     
     def get_cooling_parameters(self):
         """Get cooling water parameters for this plant."""
-        params = {
-            'ph': {'min': self.cooling_ph_min, 'max': self.cooling_ph_max},
-            'tds': {'min': self.cooling_tds_min, 'max': self.cooling_tds_max},
-            'hardness': {'max': self.cooling_hardness_max},
-            'alkalinity': {'max': self.cooling_alkalinity_max}
-        }
+        params = {}
+        
+        # Include only when configured
+        if self.cooling_ph_min is not None or self.cooling_ph_max is not None:
+            params['ph'] = {'min': self.cooling_ph_min, 'max': self.cooling_ph_max}
+        if self.cooling_tds_min is not None or self.cooling_tds_max is not None:
+            params['tds'] = {'min': self.cooling_tds_min, 'max': self.cooling_tds_max}
+        if self.cooling_hardness_max is not None:
+            params['hardness'] = {'max': self.cooling_hardness_max}
+        if self.cooling_alkalinity_max is not None:
+            params['alkalinity'] = {'max': self.cooling_alkalinity_max}
         
         # Only include optional parameters if enabled
         if self.cooling_chloride_enabled:
@@ -149,12 +154,17 @@ class Plant(models.Model):
     
     def get_boiler_parameters(self):
         """Get boiler water parameters for this plant."""
-        params = {
-            'ph': {'min': self.boiler_ph_min, 'max': self.boiler_ph_max},
-            'tds': {'min': self.boiler_tds_min, 'max': self.boiler_tds_max},
-            'hardness': {'max': self.boiler_hardness_max},
-            'alkalinity': {'min': self.boiler_alkalinity_min, 'max': self.boiler_alkalinity_max}
-        }
+        params = {}
+        
+        # Include only when configured
+        if self.boiler_ph_min is not None or self.boiler_ph_max is not None:
+            params['ph'] = {'min': self.boiler_ph_min, 'max': self.boiler_ph_max}
+        if self.boiler_tds_min is not None or self.boiler_tds_max is not None:
+            params['tds'] = {'min': self.boiler_tds_min, 'max': self.boiler_tds_max}
+        if self.boiler_hardness_max is not None:
+            params['hardness'] = {'max': self.boiler_hardness_max}
+        if self.boiler_alkalinity_min is not None or self.boiler_alkalinity_max is not None:
+            params['alkalinity'] = {'min': self.boiler_alkalinity_min, 'max': self.boiler_alkalinity_max}
         
         # Only include optional parameters if enabled
         if self.boiler_p_alkalinity_enabled:
@@ -297,19 +307,22 @@ class WaterAnalysis(models.Model):
         """Calculate LSI, RSI, PSI, and LR indices for cooling water."""
         try:
             # Convert Decimal fields to float for calculations with safe conversion
-            ph = float(self.ph) if self.ph else 0
-            tds = float(self.tds) if self.tds else 0
-            total_alkalinity = float(self.total_alkalinity) if self.total_alkalinity else 0
-            hardness = float(self.hardness) if self.hardness else 0
+            ph = float(self.ph) if self.ph is not None else None
+            tds = float(self.tds) if self.tds is not None else None
+            total_alkalinity = float(self.total_alkalinity) if self.total_alkalinity is not None else None
+            hardness = float(self.hardness) if self.hardness is not None else None
             # Handle chloride - only use if plant has chloride enabled and value is provided
             if hasattr(self, 'plant') and self.plant and self.plant.cooling_chloride_enabled:
-                chloride = float(self.chloride) if self.chloride else 0
+                chloride = float(self.chloride) if self.chloride is not None else None
             else:
-                chloride = 0  # Skip chloride if not enabled
-            temperature = float(self.temperature) if self.temperature else 25
-            sulphate = float(self.sulphate) if self.sulphate else 0
+                chloride = None  # Skip chloride if not enabled
+            temperature = float(self.temperature) if self.temperature is not None else None
+            sulphate = float(self.sulphate) if self.sulphate is not None else None
             
-            # Langelier Saturation Index (LSI)
+            # If key inputs are missing, skip log-based indices to avoid math domain errors
+            can_compute_lsi = ph is not None and tds is not None and hardness is not None and total_alkalinity is not None and (temperature is not None)
+
+            # Langelier Saturation Index (LSI) (only when we have all needed inputs)
             # LSI = pH - pHs
             # pHs = 9.3 + A + B - C - D
             # Where:
@@ -318,47 +331,59 @@ class WaterAnalysis(models.Model):
             # C = Log10(Hardness CaCO3) - 0.4
             # D = Log10(Alkaline CaCO3)
             
-            import math
-            # Calculate A, B, C, D factors
-            A = (math.log10(tds) - 1) / 10 if tds > 0 else 0
-            B = -13.12 * math.log10(temperature + 273) + 34.55 if temperature > 0 else 0
-            C = math.log10(hardness) - 0.4 if hardness > 0 else 0
-            D = math.log10(total_alkalinity) if total_alkalinity > 0 else 0
-            
-            phs = 9.3 + A + B - C - D
-            self.lsi = ph - phs
-            
-            # Ryznar Stability Index (RSI)
-            # RSI = 2 * pHs - pH
-            self.rsi = 2 * phs - ph
-            
-            # Puckorius Scaling Index (PSI)
-            # PSI = 2 * pHs - pHe
-            # Where pHe = 1.465 + Log10(Alkaline CaCO3) + 4.54
-            import math
-            pHe = 1.465 + math.log10(total_alkalinity) + 4.54 if total_alkalinity > 0 else 0
-            self.psi = 2 * phs - pHe
+            if can_compute_lsi and tds > 0 and hardness > 0 and total_alkalinity > 0 and (temperature is not None and temperature > 0):
+                import math
+                # Calculate A, B, C, D factors
+                A = (math.log10(tds) - 1) / 10
+                B = -13.12 * math.log10(temperature + 273) + 34.55
+                C = math.log10(hardness) - 0.4
+                D = math.log10(total_alkalinity)
+                
+                phs = 9.3 + A + B - C - D
+                self.lsi = ph - phs
+                
+                # Ryznar Stability Index (RSI)
+                # RSI = 2 * pHs - pH
+                self.rsi = 2 * phs - ph
+                
+                # Puckorius Scaling Index (PSI)
+                # PSI = 2 * pHs - pHe
+                # Where pHe = 1.465 + Log10(Alkaline CaCO3) + 4.54
+                pHe = 1.465 + math.log10(total_alkalinity) + 4.54
+                self.psi = 2 * phs - pHe
+            else:
+                self.lsi = None
+                self.rsi = None
+                self.psi = None
             
             # Langelier Ratio (LR)
             # LR = (Cl + SO4) / (HCO3)
             # Only calculate if chloride is enabled for this plant
-            if hasattr(self, 'plant') and self.plant and self.plant.cooling_chloride_enabled:
-                if total_alkalinity > 0:
-                    self.lr = (chloride + sulphate) / total_alkalinity
+            if total_alkalinity is not None and total_alkalinity > 0:
+                if hasattr(self, 'plant') and self.plant and self.plant.cooling_chloride_enabled:
+                    # Require chloride value to compute with chloride; if not present, skip
+                    if chloride is not None and sulphate is not None:
+                        self.lr = (chloride + sulphate) / total_alkalinity
+                    elif chloride is not None:
+                        self.lr = chloride / total_alkalinity
+                    elif sulphate is not None:
+                        self.lr = sulphate / total_alkalinity
+                    else:
+                        self.lr = None
                 else:
-                    self.lr = 0
+                    # Skip chloride in calculation if not enabled
+                    if sulphate is not None:
+                        self.lr = sulphate / total_alkalinity
+                    else:
+                        self.lr = None
             else:
-                # Skip chloride in calculation if not enabled
-                if total_alkalinity > 0:
-                    self.lr = sulphate / total_alkalinity
-                else:
-                    self.lr = 0
+                self.lr = None
             
             # Determine status
-            self.lsi_status = self._get_lsi_status()
-            self.rsi_status = self._get_rsi_status()
-            self.psi_status = self._get_psi_status()
-            self.lr_status = self._get_lr_status()
+            self.lsi_status = self._get_lsi_status() if self.lsi is not None else ""
+            self.rsi_status = self._get_rsi_status() if self.rsi is not None else ""
+            self.psi_status = self._get_psi_status() if self.psi is not None else ""
+            self.lr_status = self._get_lr_status() if self.lr is not None else ""
             self.overall_status = self._get_cooling_overall_status()
             
             # Calculate stability score (0-100)
@@ -370,39 +395,64 @@ class WaterAnalysis(models.Model):
     def _calculate_boiler_stability_score(self):
         """Calculate stability score for boiler water."""
         try:
-            ph = float(self.ph) if self.ph else 0
-            tds = float(self.tds) if self.tds else 0
-            hardness = float(self.hardness) if self.hardness else 0
-            m_alkalinity = float(self.m_alkalinity) if self.m_alkalinity else 0
+            ph = float(self.ph) if self.ph is not None else None
+            tds = float(self.tds) if self.tds is not None else None
+            hardness = float(self.hardness) if self.hardness is not None else None
+            m_alkalinity = float(self.m_alkalinity) if self.m_alkalinity is not None else None
+
+            # Helper to check and penalize outside ranges with plant-configurable targets
+            def penalize_range(val, rng_min, rng_max, step, base_penalty):
+                if val is None:
+                    return 0
+                if rng_min is None and rng_max is None:
+                    return 0
+                # Clamp missing side with the other bound to compute deviation
+                if rng_min is not None and val < rng_min:
+                    deviation_units = (rng_min - val) / step
+                    return deviation_units * base_penalty
+                if rng_max is not None and val > rng_max:
+                    deviation_units = (val - rng_max) / step
+                    return deviation_units * base_penalty
+                return 0
             
             # Start with 100 points
             score = 100
             
-            # pH deduction (ideal range 10.5-11.5)
-            if ph < 10.5 or ph > 11.5:
-                deviation = abs(ph - 11.0)  # deviation from ideal center
-                points_to_deduct = (deviation / 0.1) * 5
-                score -= points_to_deduct
-            
-            # TDS deduction (ideal range 2500-3500)
-            if tds < 2500 or tds > 3500:
-                if tds > 4000:
-                    score -= 20
-                else:
+            # Use plant-specific configured ranges when available; otherwise use sensible defaults
+            plant = getattr(self, 'plant', None)
+            ph_min = plant.boiler_ph_min if plant else None
+            ph_max = plant.boiler_ph_max if plant else None
+            tds_min = plant.boiler_tds_min if plant else None
+            tds_max = plant.boiler_tds_max if plant else None
+            hardness_max = plant.boiler_hardness_max if plant else None
+            alk_min = plant.boiler_alkalinity_min if plant else None
+            alk_max = plant.boiler_alkalinity_max if plant else None
+
+            # Defaults if plant ranges not configured
+            ph_min = float(ph_min) if ph_min is not None else 10.5
+            ph_max = float(ph_max) if ph_max is not None else 11.5
+            tds_min = float(tds_min) if tds_min is not None else 2500
+            tds_max = float(tds_max) if tds_max is not None else 3500
+            hardness_max = float(hardness_max) if hardness_max is not None else 2.0
+            alk_min = float(alk_min) if alk_min is not None else 250
+            alk_max = float(alk_max) if alk_max is not None else 600
+
+            # pH deduction (use 0.1 step, 5 points per step)
+            score -= penalize_range(ph, ph_min, ph_max, step=0.1, base_penalty=5)
+
+            # TDS deduction: outside range small penalty; heavy if far
+            if tds is not None:
+                if tds < tds_min or tds > tds_max:
                     score -= 10
-            
-            # Hardness deduction (ideal ≤ 2)
-            if hardness > 2:
-                if hardness > 5:
-                    score -= 20
-                else:
-                    score -= 10
-            
-            # M-Alkalinity deduction (ideal range 250-600)
-            if m_alkalinity < 250 or m_alkalinity > 600:
-                deviation = abs(m_alkalinity - 425)  # deviation from ideal center
-                points_to_deduct = (deviation / 50) * 2
-                score -= points_to_deduct
+                    if tds is not None and (tds > (tds_max + 500) or tds < max(0, tds_min - 500)):
+                        score -= 10
+
+            # Hardness deduction: penalty only when exceeding max
+            if hardness is not None and hardness_max is not None and hardness > hardness_max:
+                score -= 10 if hardness <= hardness_max + 3 else 20
+
+            # M-Alkalinity deduction (use 50 ppm step, 2 points per step)
+            score -= penalize_range(m_alkalinity, alk_min, alk_max, step=50, base_penalty=2)
             
             return max(0, min(100, score))
         except Exception as e:
