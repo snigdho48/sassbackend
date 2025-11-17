@@ -900,11 +900,11 @@ class PlantViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         user = self.request.user
-        if user.is_admin:
-            # Admins can see all active plants
+        if user.is_admin and user.can_create_plants:
+            # Super Admins can see all active plants
             return Plant.objects.filter(is_active=True)
         else:
-            # Regular users can only see plants they own (check both owners ManyToMany and legacy owner field)
+            # Regular users and regular administrators can only see plants they own (check both owners ManyToMany and legacy owner field)
             return Plant.objects.filter(
                 is_active=True
             ).filter(
