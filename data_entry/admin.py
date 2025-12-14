@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import DataCategory, TechnicalData, AnalyticalScore, DataCalculation, WaterAnalysis, WaterTrend, WaterRecommendation
+from .models import DataCategory, TechnicalData, AnalyticalScore, DataCalculation, WaterAnalysis, WaterTrend, WaterRecommendation, Plant, WaterSystem
 
 
 @admin.register(DataCategory)
@@ -83,3 +83,21 @@ class WaterRecommendationAdmin(admin.ModelAdmin):
     list_filter = ('recommendation_type', 'priority', 'is_implemented', 'created_at')
     search_fields = ('title', 'description', 'analysis__analysis_name')
     ordering = ('-priority', '-created_at')
+
+
+@admin.register(Plant)
+class PlantAdmin(admin.ModelAdmin):
+    list_display = ('name', 'is_active', 'created_at')
+    list_filter = ('is_active', 'created_at')
+    search_fields = ('name',)
+    filter_horizontal = ('owners',)
+    ordering = ('name',)
+
+
+@admin.register(WaterSystem)
+class WaterSystemAdmin(admin.ModelAdmin):
+    list_display = ('name', 'plant', 'system_type', 'is_active', 'created_at')
+    list_filter = ('system_type', 'is_active', 'plant', 'created_at')
+    search_fields = ('name', 'plant__name')
+    filter_horizontal = ('assigned_users',)
+    ordering = ('plant', 'system_type', 'name')

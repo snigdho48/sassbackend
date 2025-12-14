@@ -186,10 +186,151 @@ class Plant(models.Model):
         return params
 
 
+class WaterSystem(models.Model):
+    """Water system model for cooling or boiler water systems under a plant."""
+    SYSTEM_TYPES = [
+        ('cooling', 'Cooling Water'),
+        ('boiler', 'Boiler Water'),
+    ]
+    
+    plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name='water_systems')
+    name = models.CharField(max_length=100, help_text="Name of the water system (e.g., 'Cooling Tower 1', 'Boiler System A')")
+    system_type = models.CharField(max_length=20, choices=SYSTEM_TYPES)
+    is_active = models.BooleanField(default=True)
+    # Users who can access this water system for analysis
+    assigned_users = models.ManyToManyField(User, blank=True, related_name='assigned_water_systems', help_text='Users assigned to this water system')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    # Cooling water parameters (all optional)
+    cooling_ph_min = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+    cooling_ph_max = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+    cooling_tds_min = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    cooling_tds_max = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    cooling_hardness_max = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    cooling_alkalinity_max = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    cooling_chloride_max = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    cooling_chloride_enabled = models.BooleanField(default=False, help_text="Enable chloride monitoring")
+    cooling_cycle_min = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
+    cooling_cycle_max = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
+    cooling_cycle_enabled = models.BooleanField(default=False, help_text="Enable cycle of concentration monitoring")
+    cooling_iron_max = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
+    cooling_iron_enabled = models.BooleanField(default=False, help_text="Enable iron monitoring")
+    cooling_phosphate_max = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    cooling_phosphate_enabled = models.BooleanField(default=False, help_text="Enable phosphate monitoring")
+    cooling_lsi_min = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
+    cooling_lsi_max = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
+    cooling_lsi_enabled = models.BooleanField(default=False, help_text="Enable LSI monitoring")
+    cooling_rsi_min = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
+    cooling_rsi_max = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
+    cooling_rsi_enabled = models.BooleanField(default=False, help_text="Enable RSI monitoring")
+    
+    # Boiler water parameters (all optional)
+    boiler_ph_min = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+    boiler_ph_max = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
+    boiler_tds_min = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    boiler_tds_max = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    boiler_hardness_max = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
+    boiler_alkalinity_min = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    boiler_alkalinity_max = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    boiler_p_alkalinity_min = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    boiler_p_alkalinity_max = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    boiler_p_alkalinity_enabled = models.BooleanField(default=False, help_text="Enable P-alkalinity monitoring")
+    boiler_oh_alkalinity_min = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    boiler_oh_alkalinity_max = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    boiler_oh_alkalinity_enabled = models.BooleanField(default=False, help_text="Enable OH-alkalinity monitoring")
+    boiler_sulphite_min = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    boiler_sulphite_max = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    boiler_sulphite_enabled = models.BooleanField(default=False, help_text="Enable sulphite monitoring")
+    boiler_sodium_chloride_max = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    boiler_sodium_chloride_enabled = models.BooleanField(default=False, help_text="Enable sodium chloride monitoring")
+    boiler_do_min = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    boiler_do_max = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    boiler_do_enabled = models.BooleanField(default=False, help_text="Enable dissolved oxygen monitoring")
+    boiler_phosphate_min = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    boiler_phosphate_max = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    boiler_phosphate_enabled = models.BooleanField(default=False, help_text="Enable phosphate monitoring")
+    boiler_iron_max = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
+    boiler_iron_enabled = models.BooleanField(default=False, help_text="Enable iron monitoring")
+    
+    class Meta:
+        ordering = ['plant', 'system_type', 'name']
+        unique_together = ['plant', 'name', 'system_type']  # Same name can exist for different types
+    
+    def __str__(self):
+        return f"{self.plant.name} - {self.get_system_type_display()} - {self.name}"
+    
+    def get_parameters(self):
+        """Get parameters based on system type."""
+        if self.system_type == 'cooling':
+            return self.get_cooling_parameters()
+        else:
+            return self.get_boiler_parameters()
+    
+    def get_cooling_parameters(self):
+        """Get cooling water parameters for this system."""
+        params = {}
+        
+        if self.cooling_ph_min is not None or self.cooling_ph_max is not None:
+            params['ph'] = {'min': self.cooling_ph_min, 'max': self.cooling_ph_max}
+        if self.cooling_tds_min is not None or self.cooling_tds_max is not None:
+            params['tds'] = {'min': self.cooling_tds_min, 'max': self.cooling_tds_max}
+        if self.cooling_hardness_max is not None:
+            params['hardness'] = {'max': self.cooling_hardness_max}
+        if self.cooling_alkalinity_max is not None:
+            params['alkalinity'] = {'max': self.cooling_alkalinity_max}
+        
+        if self.cooling_chloride_enabled:
+            params['chloride'] = {'max': self.cooling_chloride_max}
+        if self.cooling_cycle_enabled:
+            params['cycle'] = {'min': self.cooling_cycle_min, 'max': self.cooling_cycle_max}
+        if self.cooling_iron_enabled:
+            params['iron'] = {'max': self.cooling_iron_max}
+        if self.cooling_phosphate_enabled:
+            params['phosphate'] = {'max': self.cooling_phosphate_max}
+        if self.cooling_lsi_enabled:
+            params['lsi'] = {'min': self.cooling_lsi_min, 'max': self.cooling_lsi_max}
+        if self.cooling_rsi_enabled:
+            params['rsi'] = {'min': self.cooling_rsi_min, 'max': self.cooling_rsi_max}
+            
+        return params
+    
+    def get_boiler_parameters(self):
+        """Get boiler water parameters for this system."""
+        params = {}
+        
+        if self.boiler_ph_min is not None or self.boiler_ph_max is not None:
+            params['ph'] = {'min': self.boiler_ph_min, 'max': self.boiler_ph_max}
+        if self.boiler_tds_min is not None or self.boiler_tds_max is not None:
+            params['tds'] = {'min': self.boiler_tds_min, 'max': self.boiler_tds_max}
+        if self.boiler_hardness_max is not None:
+            params['hardness'] = {'max': self.boiler_hardness_max}
+        if self.boiler_alkalinity_min is not None or self.boiler_alkalinity_max is not None:
+            params['alkalinity'] = {'min': self.boiler_alkalinity_min, 'max': self.boiler_alkalinity_max}
+        
+        if self.boiler_p_alkalinity_enabled:
+            params['p_alkalinity'] = {'min': self.boiler_p_alkalinity_min, 'max': self.boiler_p_alkalinity_max}
+        if self.boiler_oh_alkalinity_enabled:
+            params['oh_alkalinity'] = {'min': self.boiler_oh_alkalinity_min, 'max': self.boiler_oh_alkalinity_max}
+        if self.boiler_sulphite_enabled:
+            params['sulphite'] = {'min': self.boiler_sulphite_min, 'max': self.boiler_sulphite_max}
+        if self.boiler_sodium_chloride_enabled:
+            params['sodium_chloride'] = {'max': self.boiler_sodium_chloride_max}
+        if self.boiler_do_enabled:
+            params['do'] = {'min': self.boiler_do_min, 'max': self.boiler_do_max}
+        if self.boiler_phosphate_enabled:
+            params['phosphate'] = {'min': self.boiler_phosphate_min, 'max': self.boiler_phosphate_max}
+        if self.boiler_iron_enabled:
+            params['iron'] = {'max': self.boiler_iron_max}
+            
+        return params
+
+
 class WaterAnalysis(models.Model):
     """Water analysis data for stability calculations."""
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='water_analyses')
     plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name='water_analyses', null=True, blank=True)
+    water_system = models.ForeignKey('WaterSystem', on_delete=models.CASCADE, related_name='water_analyses', null=True, blank=True, help_text='The specific water system (cooling/boiler) for this analysis')
     analysis_date = models.DateField(default=timezone.now)
     analysis_name = models.CharField(max_length=100, default="Water Analysis")
     analysis_type = models.CharField(max_length=20, choices=[('cooling', 'Cooling Water'), ('boiler', 'Boiler Water')], default='cooling')

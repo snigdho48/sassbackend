@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from users.models import CustomUser
-from data_entry.models import DataCategory, TechnicalData, AnalyticalScore, WaterAnalysis, WaterTrend, WaterRecommendation, Plant
+from data_entry.models import DataCategory, TechnicalData, AnalyticalScore, WaterAnalysis, WaterTrend, WaterRecommendation, Plant, WaterSystem
 from reports.models import ReportTemplate, GeneratedReport
 from dashboard.models import DashboardWidget, UserPreference
 
@@ -231,7 +231,7 @@ class WaterAnalysisSerializer(serializers.ModelSerializer):
     class Meta:
         model = WaterAnalysis
         fields = [
-            'id', 'analysis_name', 'analysis_date', 'plant', 'analysis_type', 'ph', 'tds', 'total_alkalinity', 
+            'id', 'analysis_name', 'analysis_date', 'plant', 'water_system', 'analysis_type', 'ph', 'tds', 'total_alkalinity', 
             'hardness', 'chloride', 'temperature', 'basin_temperature', 'sulphate', 'cycle', 'iron', 'phosphate',
             'm_alkalinity', 'p_alkalinity', 'oh_alkalinity', 'sulphite', 'sodium_chloride', 'do', 'boiler_phosphate',
             'lsi', 'rsi', 'psi', 'lr', 'stability_score',
@@ -297,47 +297,7 @@ class PlantDetailSerializer(serializers.ModelSerializer):
                 field.allow_null = True
     
     def validate(self, attrs):
-        """Validate that at least one parameter is provided when creating a new plant"""
-        # Check if this is a create operation (instance is None)
-        if self.instance is None:
-            # List of all parameter fields (excluding name, is_active, owners, and enabled flags)
-            parameter_fields = [
-                # Cooling water parameters
-                'cooling_ph_min', 'cooling_ph_max',
-                'cooling_tds_min', 'cooling_tds_max',
-                'cooling_hardness_max',
-                'cooling_alkalinity_max',
-                'cooling_chloride_max',
-                'cooling_cycle_min', 'cooling_cycle_max',
-                'cooling_iron_max',
-                'cooling_phosphate_max',
-                'cooling_lsi_min', 'cooling_lsi_max',
-                'cooling_rsi_min', 'cooling_rsi_max',
-                # Boiler water parameters
-                'boiler_ph_min', 'boiler_ph_max',
-                'boiler_tds_min', 'boiler_tds_max',
-                'boiler_hardness_max',
-                'boiler_alkalinity_min', 'boiler_alkalinity_max',
-                'boiler_p_alkalinity_min', 'boiler_p_alkalinity_max',
-                'boiler_oh_alkalinity_min', 'boiler_oh_alkalinity_max',
-                'boiler_sulphite_min', 'boiler_sulphite_max',
-                'boiler_sodium_chloride_max',
-                'boiler_do_min', 'boiler_do_max',
-                'boiler_phosphate_min', 'boiler_phosphate_max',
-                'boiler_iron_max',
-            ]
-            
-            # Check if at least one parameter field has a value
-            has_parameter = any(
-                attrs.get(field) is not None and attrs.get(field) != '' 
-                for field in parameter_fields
-            )
-            
-            if not has_parameter:
-                raise serializers.ValidationError(
-                    "At least one plant parameter must be provided. Please specify at least one cooling or boiler water parameter."
-                )
-        
+        """Validate plant data - parameters are now managed via water systems, so no parameter validation needed"""
         # Ensure boolean fields have proper default values
         boolean_fields = [
             'is_active',
@@ -362,6 +322,34 @@ class PlantDetailSerializer(serializers.ModelSerializer):
                 attrs[field] = False
                 
         return attrs
+
+
+class WaterSystemSerializer(serializers.ModelSerializer):
+    """Serializer for water systems (cooling/boiler water systems under plants)."""
+    plant_name = serializers.CharField(source='plant.name', read_only=True)
+    assigned_users = UserSerializer(many=True, read_only=True)
+    assigned_user_ids = serializers.PrimaryKeyRelatedField(
+        many=True,
+        write_only=True,
+        queryset=CustomUser.objects.all(),
+        required=False,
+        allow_null=True,
+        source='assigned_users'
+    )
+    system_type_display = serializers.CharField(source='get_system_type_display', read_only=True)
+    
+    class Meta:
+        model = WaterSystem
+        fields = '__all__'
+    
+    def __init__(self, *args, **kwargs):
+        """Make all parameter fields optional except name, plant, and system_type"""
+        super().__init__(*args, **kwargs)
+        for field_name, field in self.fields.items():
+            if field_name not in ['name', 'plant', 'system_type', 'is_active', 'assigned_users', 'assigned_user_ids', 'plant_name', 'system_type_display', 'created_at', 'updated_at']:
+                field.required = False
+                field.allow_null = True
+
 
 class WaterRecommendationSerializer(serializers.ModelSerializer):
     class Meta:

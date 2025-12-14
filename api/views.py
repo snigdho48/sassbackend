@@ -23,10 +23,10 @@ from .serializers import (
     AnalyticalScoreSerializer, ReportTemplateSerializer, GeneratedReportSerializer,
     DashboardDataSerializer, AnalyticsSerializer, TokenRefreshSerializer,
     WaterAnalysisSerializer, WaterTrendSerializer, WaterRecommendationSerializer, 
-    PlantListSerializer, PlantDetailSerializer
+    PlantListSerializer, PlantDetailSerializer, WaterSystemSerializer
 )
 from users.models import CustomUser
-from data_entry.models import DataCategory, TechnicalData, AnalyticalScore, WaterAnalysis, WaterTrend, WaterRecommendation, Plant
+from data_entry.models import DataCategory, TechnicalData, AnalyticalScore, WaterAnalysis, WaterTrend, WaterRecommendation, Plant, WaterSystem
 from reports.models import ReportTemplate, GeneratedReport
 from dashboard.models import DashboardWidget, UserPreference
 from .models import APIUsage
@@ -902,14 +902,18 @@ class PlantViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if user.is_admin and user.can_create_plants:
             # Super Admins can see all active plants
-            return Plant.objects.filter(is_active=True)
+            return Plant.objects.filter(is_active=True).order_by('-created_at')
         else:
-            # Regular users and regular administrators can only see plants they own (check both owners ManyToMany and legacy owner field)
+            # Regular users and regular administrators can see:
+            # 1. Plants they own (check both owners ManyToMany and legacy owner field)
+            # 2. Plants that have water systems assigned to them
             return Plant.objects.filter(
                 is_active=True
             ).filter(
-                Q(owners=user) | Q(owner=user)
-            ).distinct()
+                Q(owners=user) | 
+                Q(owner=user) |
+                Q(water_systems__assigned_users=user)  # Plants with water systems assigned to user
+            ).distinct().order_by('-created_at')
     
     def get_serializer_class(self):
         """Use lightweight serializer for list, full serializer for detail"""
@@ -1024,13 +1028,13 @@ class PlantManagementViewSet(viewsets.ModelViewSet):
         
         # Super Admin can see all plants (active and inactive)
         if user.can_create_plants:
-            return Plant.objects.all()
+            return Plant.objects.all().order_by('-created_at')
         
         # Admin and General Users can only see plants where they are the owner
         # Check both owners ManyToMany field and legacy owner ForeignKey field
         return Plant.objects.filter(
             Q(owners__id=user.id) | Q(owner_id=user.id)
-        ).distinct()
+        ).distinct().order_by('-created_at')
     
     @swagger_auto_schema(
         operation_description="List all plants for management table with full data",
@@ -1181,6 +1185,113 @@ class PlantManagementViewSet(viewsets.ModelViewSet):
         
         return super().destroy(request, *args, **kwargs)
 
+
+class WaterSystemViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing water systems (cooling/boiler) under plants."""
+    serializer_class = WaterSystemSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        user = self.request.user
+        plant_id = self.request.query_params.get('plant_id')
+        
+        queryset = WaterSystem.objects.filter(is_active=True)
+        
+        # Filter by plant if provided
+        if plant_id:
+            queryset = queryset.filter(plant_id=plant_id)
+        
+        # Super Admin can see all water systems
+        if user.can_create_plants:
+            return queryset
+        
+        # Admin and General Users can only see water systems they have access to
+        # Check if user is assigned to the water system or owns the plant
+        return queryset.filter(
+            Q(assigned_users=user) | Q(plant__owners=user) | Q(plant__owner=user)
+        ).distinct()
+    
+    def perform_create(self, serializer):
+        """Only Super Admin can create water systems."""
+        user = self.request.user
+        if not user.can_create_plants:
+            raise ValidationError({'error': 'Only Super Administrator can create water systems'})
+        serializer.save()
+    
+    def perform_update(self, serializer):
+        """Only Super Admin can update water systems."""
+        user = self.request.user
+        if not user.can_create_plants:
+            raise ValidationError({'error': 'Only Super Administrator can update water systems'})
+        serializer.save()
+    
+    def perform_destroy(self, instance):
+        """Only Super Admin can delete water systems."""
+        user = self.request.user
+        if not user.can_create_plants:
+            raise ValidationError({'error': 'Only Super Administrator can delete water systems'})
+        instance.delete()
+    
+    @action(detail=True, methods=['post'])
+    def assign_users(self, request, pk=None):
+        """Assign users to a water system (Only regular Admin can do this, not Super Admin)."""
+        water_system = self.get_object()
+        user = request.user
+        
+        # Only regular admins (not super admin) can assign users
+        if not user.is_admin or user.can_create_plants:
+            return Response(
+                {'error': 'Only Admin users (not Super Admin) can assign users to water systems'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        user_ids = request.data.get('user_ids', [])
+        if not isinstance(user_ids, list):
+            return Response(
+                {'error': 'user_ids must be a list'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Get users
+        users = CustomUser.objects.filter(id__in=user_ids, is_active=True)
+        water_system.assigned_users.set(users)
+        
+        serializer = self.get_serializer(water_system)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def by_plant(self, request):
+        """Get all water systems for a specific plant."""
+        plant_id = request.query_params.get('plant_id')
+        if not plant_id:
+            return Response(
+                {'error': 'plant_id parameter is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        user = request.user
+        queryset = self.get_queryset().filter(plant_id=plant_id)
+        
+        # Check if user has access to this plant
+        try:
+            plant = Plant.objects.get(id=plant_id)
+            if not user.can_create_plants:
+                # Check if user owns the plant
+                if user not in plant.owners.all() and plant.owner != user:
+                    return Response(
+                        {'error': 'You do not have access to this plant'},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+        except Plant.DoesNotExist:
+            return Response(
+                {'error': 'Plant not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+
 # Water Analysis Views
 class WaterAnalysisViewSet(viewsets.ModelViewSet):
     """ViewSet for water analysis."""
@@ -1191,26 +1302,44 @@ class WaterAnalysisViewSet(viewsets.ModelViewSet):
         user = self.request.user
         queryset = WaterAnalysis.objects.filter(user=user)
         
-        # General Users can only see analyses for plants they own (check both owners ManyToMany and legacy owner field)
+        # General Users can only see analyses for water systems they are assigned to
         if user.is_general_user:
             queryset = queryset.filter(
-                Q(plant__owners=user) | Q(plant__owner=user)
+                water_system__assigned_users=user
+            ).distinct()
+        elif user.is_admin and not user.can_create_plants:
+            # Regular admins can see analyses for water systems they are assigned to or plants they own
+            queryset = queryset.filter(
+                Q(water_system__assigned_users=user) | 
+                Q(water_system__plant__owners=user) | 
+                Q(water_system__plant__owner=user)
             ).distinct()
         
         return queryset
     
     def perform_create(self, serializer):
         user = self.request.user
-        plant = serializer.validated_data.get('plant')
+        water_system = serializer.validated_data.get('water_system')
         
-        # General Users can only input data for assigned plants (plants they own)
+        # Validate water_system is provided
+        if not water_system:
+            raise ValidationError({'water_system': 'Water system is required'})
+        
+        # Check user access to water system
         if user.is_general_user:
-            if not plant:
-                raise ValidationError({'plant': 'Plant is required for General Users'})
-            # Check if user is in plant.owners (ManyToMany) or plant.owner (legacy)
-            if user not in plant.owners.all() and plant.owner != user:
+            # General users must be assigned to the water system
+            if user not in water_system.assigned_users.all():
                 raise ValidationError(
-                    {'plant': 'You can only input data for plants assigned to you'}
+                    {'water_system': 'You do not have access to this water system. Please contact an administrator.'}
+                )
+        elif user.is_admin and not user.can_create_plants:
+            # Regular admins must be assigned to the water system or own the plant
+            plant = water_system.plant
+            has_water_system_access = user in water_system.assigned_users.all()
+            has_plant_access = user in plant.owners.all() or plant.owner == user
+            if not (has_water_system_access or has_plant_access):
+                raise ValidationError(
+                    {'water_system': 'You do not have access to this water system. Please contact a super administrator.'}
                 )
         
         water_analysis = serializer.save(user=user)
@@ -1608,15 +1737,15 @@ def calculate_water_analysis_with_recommendations_view(request):
     try:
         # Extract parameters from request and convert to float
         analysis_type = request.data.get('analysis_type', 'cooling')  # 'cooling' or 'boiler'
-        plant_id = request.data.get('plant_id')
+        water_system_id = request.data.get('water_system_id')
         
-        # Get plant-specific parameters if plant_id is provided
-        plant = None
-        if plant_id:
+        # Get water system parameters if water_system_id is provided
+        water_system = None
+        if water_system_id:
             try:
-                plant = Plant.objects.get(id=plant_id, is_active=True)
-            except Plant.DoesNotExist:
-                return Response({'error': 'Plant not found'}, status=status.HTTP_404_NOT_FOUND)
+                water_system = WaterSystem.objects.get(id=water_system_id, is_active=True)
+            except WaterSystem.DoesNotExist:
+                return Response({'error': 'Water system not found'}, status=status.HTTP_404_NOT_FOUND)
         
         # Helper to parse safely without defaults
         def _f(val):
@@ -1651,9 +1780,9 @@ def calculate_water_analysis_with_recommendations_view(request):
             # Start score: 100 points
             stability_score = 100
             
-            # Get plant-specific parameters or use defaults, handling missing keys gracefully
-            if plant:
-                boiler_params = plant.get_boiler_parameters()
+            # Get water system parameters or use defaults, handling missing keys gracefully
+            if water_system and water_system.system_type == 'boiler':
+                boiler_params = water_system.get_boiler_parameters()
                 ph_min = float(boiler_params.get('ph', {}).get('min')) if boiler_params.get('ph') else None
                 ph_max = float(boiler_params.get('ph', {}).get('max')) if boiler_params.get('ph') else None
                 tds_min = float(boiler_params.get('tds', {}).get('min')) if boiler_params.get('tds') else None
@@ -1954,8 +2083,8 @@ def calculate_water_analysis_with_recommendations_view(request):
         s_rsi = score_rsi(rsi_status);   components.append(s_rsi)
         s_psi = score_psi(psi_status);   components.append(s_psi)
         s_lr  = score_lr(lr_status);     components.append(s_lr)
-        # Add direct adherence components for any configured plant targets
-        cooling_targets = plant.get_cooling_parameters() if plant else {}
+        # Add direct adherence components for any configured water system targets
+        cooling_targets = water_system.get_cooling_parameters() if (water_system and water_system.system_type == 'cooling') else {}
         # pH
         if cooling_targets.get('ph') and ph is not None:
             _min, _max = cooling_targets['ph'].get('min'), cooling_targets['ph'].get('max')
