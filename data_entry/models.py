@@ -413,7 +413,8 @@ class WaterAnalysis(models.Model):
         }
         
         # Add LR only if chloride monitoring is enabled for the plant
-        if self.plant and self.plant.cooling_chloride_enabled and self.lr is not None:
+        plant_obj = getattr(self, 'plant', None)
+        if plant_obj and plant_obj.cooling_chloride_enabled and self.lr is not None:
             trend_parameters['lr'] = self.lr
         
         # Create trend records
@@ -452,8 +453,15 @@ class WaterAnalysis(models.Model):
             tds = float(self.tds) if self.tds is not None else None
             total_alkalinity = float(self.total_alkalinity) if self.total_alkalinity is not None else None
             hardness = float(self.hardness) if self.hardness is not None else None
-            # Handle chloride - only use if plant has chloride enabled and value is provided
-            if hasattr(self, 'plant') and self.plant and self.plant.cooling_chloride_enabled:
+            # Handle chloride - check water_system first, then plant
+            # Prefer water_system setting, fallback to plant setting
+            use_chloride = False
+            if self.water_system and self.water_system.system_type == 'cooling':
+                use_chloride = self.water_system.cooling_chloride_enabled
+            elif hasattr(self, 'plant') and self.plant:
+                use_chloride = self.plant.cooling_chloride_enabled
+            
+            if use_chloride:
                 chloride = float(self.chloride) if self.chloride is not None else None
             else:
                 chloride = None  # Skip chloride if not enabled
@@ -499,9 +507,16 @@ class WaterAnalysis(models.Model):
             
             # Langelier Ratio (LR)
             # LR = (Cl + SO4) / (HCO3)
-            # Only calculate if chloride is enabled for this plant
+            # Only calculate if chloride is enabled (check water_system first, then plant)
             if total_alkalinity is not None and total_alkalinity > 0:
-                if hasattr(self, 'plant') and self.plant and self.plant.cooling_chloride_enabled:
+                # Check if chloride should be used
+                use_chloride = False
+                if self.water_system and self.water_system.system_type == 'cooling':
+                    use_chloride = self.water_system.cooling_chloride_enabled
+                elif hasattr(self, 'plant') and self.plant:
+                    use_chloride = self.plant.cooling_chloride_enabled
+                
+                if use_chloride:
                     # Require chloride value to compute with chloride; if not present, skip
                     if chloride is not None and sulphate is not None:
                         self.lr = (chloride + sulphate) / total_alkalinity
@@ -559,15 +574,30 @@ class WaterAnalysis(models.Model):
             # Start with 100 points
             score = 100
             
-            # Use plant-specific configured ranges when available; otherwise use sensible defaults
-            plant = getattr(self, 'plant', None)
-            ph_min = plant.boiler_ph_min if plant else None
-            ph_max = plant.boiler_ph_max if plant else None
-            tds_min = plant.boiler_tds_min if plant else None
-            tds_max = plant.boiler_tds_max if plant else None
-            hardness_max = plant.boiler_hardness_max if plant else None
-            alk_min = plant.boiler_alkalinity_min if plant else None
-            alk_max = plant.boiler_alkalinity_max if plant else None
+            # Use water_system parameters first, then plant-specific configured ranges, otherwise use sensible defaults
+            # Prefer water_system parameters if available
+            if self.water_system and self.water_system.system_type == 'boiler':
+                boiler_params = self.water_system.get_boiler_parameters()
+                ph_min = boiler_params.get('ph', {}).get('min') if boiler_params.get('ph') else None
+                ph_max = boiler_params.get('ph', {}).get('max') if boiler_params.get('ph') else None
+                tds_min = boiler_params.get('tds', {}).get('min') if boiler_params.get('tds') else None
+                tds_max = boiler_params.get('tds', {}).get('max') if boiler_params.get('tds') else None
+                hardness_max = boiler_params.get('hardness', {}).get('max') if boiler_params.get('hardness') else None
+                alk_min = boiler_params.get('alkalinity', {}).get('min') if boiler_params.get('alkalinity') else None
+                alk_max = boiler_params.get('alkalinity', {}).get('max') if boiler_params.get('alkalinity') else None
+            else:
+                # Fallback to plant parameters
+                plant_obj = getattr(self, 'plant', None)
+                if plant_obj:
+                    ph_min = plant_obj.boiler_ph_min
+                    ph_max = plant_obj.boiler_ph_max
+                    tds_min = plant_obj.boiler_tds_min
+                    tds_max = plant_obj.boiler_tds_max
+                    hardness_max = plant_obj.boiler_hardness_max
+                    alk_min = plant_obj.boiler_alkalinity_min
+                    alk_max = plant_obj.boiler_alkalinity_max
+                else:
+                    ph_min = ph_max = tds_min = tds_max = hardness_max = alk_min = alk_max = None
 
             # Defaults if plant ranges not configured
             ph_min = float(ph_min) if ph_min is not None else 10.5

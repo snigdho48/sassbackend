@@ -1672,7 +1672,12 @@ def calculate_water_analysis_view(request):
         # RSI calculation
         rsi = 2 * phs - ph
         
-
+        # Return calculated indices
+        return Response({
+            'lsi': round(lsi, 3),
+            'rsi': round(rsi, 3),
+            'phs': round(phs, 3)
+        })
             
     except Exception as e:
         return Response({
@@ -1746,6 +1751,23 @@ def calculate_water_analysis_with_recommendations_view(request):
                 water_system = WaterSystem.objects.get(id=water_system_id, is_active=True)
             except WaterSystem.DoesNotExist:
                 return Response({'error': 'Water system not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        # Get plant from water_system or from request
+        plant = None
+        plant_id = None
+        if water_system and water_system.plant:
+            plant = water_system.plant
+            plant_id = plant.id
+        else:
+            # Try to get plant_id from request
+            plant_id_from_request = request.data.get('plant_id')
+            if plant_id_from_request:
+                try:
+                    plant = Plant.objects.get(id=plant_id_from_request)
+                    plant_id = plant.id
+                except Plant.DoesNotExist:
+                    plant = None
+                    plant_id = None
         
         # Helper to parse safely without defaults
         def _f(val):
@@ -1835,48 +1857,73 @@ def calculate_water_analysis_with_recommendations_view(request):
                 overall_status = "Highly Unstable"
             
             # Return exact suggested actions from the table instead of generating them
-            boiler_recommendations = [
-                {
+            boiler_recommendations = []
+            
+            # pH recommendation (only if bounds are configured)
+            if ph is not None and ph_min is not None and ph_max is not None:
+                ph_desc = (f'pH too low — corrosion risk. Adjust chemical feed to raise pH to {ph_min}-{ph_max} range.' 
+                          if ph < ph_min 
+                          else f'pH too high — risk of caustic embrittlement. Reduce chemical feed to {ph_min}-{ph_max} range.' 
+                          if ph > ph_max 
+                          else f'pH is within optimal range ({ph_min}-{ph_max}).')
+                boiler_recommendations.append({
                     'id': 'boiler_ph_1',
                     'title': 'pH Adjustment',
-                    'description': f'pH too low — corrosion risk. Adjust chemical feed to raise pH to {ph_min}-{ph_max} range.' if ph < ph_min else f'pH too high — risk of caustic embrittlement. Reduce chemical feed to {ph_min}-{ph_max} range.' if ph > ph_max else f'pH is within optimal range ({ph_min}-{ph_max}).',
+                    'description': ph_desc,
                     'type': 'chemical_adjustment',
                     'priority': 'high' if ph < ph_min or ph > ph_max else 'low',
                     'is_implemented': False,
                     'created_at': timezone.now().isoformat(),
                     'source': 'boiler_table'
-                },
-                {
+                })
+            
+            # TDS recommendation (only if bounds are configured)
+            if tds is not None and tds_min is not None and tds_max is not None:
+                tds_desc = (f'TDS too high — risk of carryover and foaming. Increase blowdown to maintain {tds_min}-{tds_max} ppm range.' 
+                           if tds > tds_max 
+                           else f'TDS is within optimal range ({tds_min}-{tds_max} ppm).')
+                boiler_recommendations.append({
                     'id': 'boiler_tds_1',
                     'title': 'TDS Management',
-                    'description': f'TDS too high — risk of carryover and foaming. Increase blowdown to maintain {tds_min}-{tds_max} ppm range.' if tds > tds_max else f'TDS is within optimal range ({tds_min}-{tds_max} ppm).',
+                    'description': tds_desc,
                     'type': 'blowdown_optimization',
                     'priority': 'medium' if tds > tds_max else 'low',
                     'is_implemented': False,
                     'created_at': timezone.now().isoformat(),
                     'source': 'boiler_table'
-                },
-                {
+                })
+            
+            # Hardness recommendation (only if bound is configured)
+            if hardness is not None and hardness_max is not None:
+                hardness_desc = (f'Hardness detected — risk of scaling. Check softener and condensate contamination. Target: ≤{hardness_max} ppm.' 
+                               if hardness > hardness_max 
+                               else f'Hardness is within optimal range (≤{hardness_max} ppm).')
+                boiler_recommendations.append({
                     'id': 'boiler_hardness_1',
                     'title': 'Hardness Control',
-                    'description': f'Hardness detected — risk of scaling. Check softener and condensate contamination. Target: ≤{hardness_max} ppm.' if hardness > hardness_max else f'Hardness is within optimal range (≤{hardness_max} ppm).',
+                    'description': hardness_desc,
                     'type': 'water_treatment',
                     'priority': 'high' if hardness > hardness_max else 'low',
                     'is_implemented': False,
                     'created_at': timezone.now().isoformat(),
                     'source': 'boiler_table'
-                },
-                {
+                })
+            
+            # M-Alkalinity recommendation (only if bounds are configured)
+            if m_alkalinity is not None and alk_min is not None and alk_max is not None:
+                malk_desc = (f'M-Alkalinity too low — may lead to corrosion. Increase alkalinity through dosing to {alk_min}-{alk_max} ppm range.' 
+                           if m_alkalinity < alk_min 
+                           else f'M-Alkalinity is within optimal range ({alk_min}-{alk_max} ppm).')
+                boiler_recommendations.append({
                     'id': 'boiler_malk_1',
                     'title': 'M-Alkalinity Management',
-                    'description': f'M-Alkalinity too low — may lead to corrosion. Increase alkalinity through dosing to {alk_min}-{alk_max} ppm range.' if m_alkalinity < alk_min else f'M-Alkalinity is within optimal range ({alk_min}-{alk_max} ppm).',
+                    'description': malk_desc,
                     'type': 'chemical_adjustment',
                     'priority': 'medium' if m_alkalinity < alk_min else 'low',
                     'is_implemented': False,
                     'created_at': timezone.now().isoformat(),
                     'source': 'boiler_table'
-                }
-            ]
+                })
             
             # Return boiler water results (only stability score)
             return Response({
@@ -1902,7 +1949,8 @@ def calculate_water_analysis_with_recommendations_view(request):
         rsi = None
         psi = None
         lr = None
-        if tds > 0 and temperature > 0 and hardness > 0 and total_alkalinity > 0:
+        phs = None
+        if tds is not None and tds > 0 and temperature is not None and temperature > 0 and hardness is not None and hardness > 0 and total_alkalinity is not None and total_alkalinity > 0 and ph is not None:
             A = (math.log10(tds) - 1) / 10
             B = -13.12 * math.log10(temperature + 273) + 34.55
             C = math.log10(hardness) - 0.4
@@ -1914,7 +1962,7 @@ def calculate_water_analysis_with_recommendations_view(request):
         # PSI calculation (Puckorius Scaling Index)
         # pHe = 1.465 + Log10(Alk as CaCO3) + 4.54
         # PSI = 2 x pHe - pHs
-        if total_alkalinity > 0 and temperature > 0:
+        if total_alkalinity is not None and total_alkalinity > 0 and phs is not None:
             pHe = 1.465 + math.log10(total_alkalinity) + 4.54
             psi = 2 * pHe - phs
         else:
@@ -1926,10 +1974,14 @@ def calculate_water_analysis_with_recommendations_view(request):
         # Molar Alkalinity, [Alk] = Total Alk as CaCO3 / 100
         # K1 and K2 are temperature-dependent equilibrium constants from the image
         # LR = [epm Cl + epm SO4] / [epm HCO3 + epm CO3]
-        use_chloride = bool(plant and plant.cooling_chloride_enabled)
-        if total_alkalinity > 0 and ((use_chloride and (chloride > 0 or sulphate > 0)) or (not use_chloride and sulphate > 0)):
+        # Prefer water_system setting, fallback to plant setting
+        if water_system and water_system.system_type == 'cooling':
+            use_chloride = bool(water_system.cooling_chloride_enabled)
+        else:
+            use_chloride = bool(plant and plant.cooling_chloride_enabled)
+        if total_alkalinity is not None and total_alkalinity > 0 and ph is not None and ((use_chloride and ((chloride is not None and chloride > 0) or (sulphate is not None and sulphate > 0))) or (not use_chloride and (sulphate is not None and sulphate > 0))):
             # Calculate equilibrium constants K1 and K2 using EXACT formulae from image
-            if temperature > 0:
+            if temperature is not None and temperature > 0:
                 # EXACT formulae from the image:
                 # K1 = 10^-(3404.71/Temp + 0.032786 × Temp - 14.8435)
                 # K2 = 10^-(2902.39/Temp + 0.02379 × Temp - 6.498)
@@ -1970,8 +2022,8 @@ def calculate_water_analysis_with_recommendations_view(request):
                     alpha_co3 = 0.20
             
             # Calculate equivalent per million values
-            epm_cl = chloride / 35.5
-            epm_so4 = sulphate / 96
+            epm_cl = (chloride / 35.5) if chloride is not None and chloride > 0 else 0
+            epm_so4 = (sulphate / 96) if sulphate is not None and sulphate > 0 else 0
             molar_alk = total_alkalinity / 100
             epm_hco3 = molar_alk * alpha_hco3
             epm_co3 = molar_alk * alpha_co3
@@ -2315,31 +2367,32 @@ def calculate_water_analysis_with_recommendations_view(request):
             })
         
         # pH-based recommendations
-        if ph < 6.5:
-            dynamic_recommendations.append({
-                'id': f'dynamic_ph_low_{int(timezone.now().timestamp())}',
-                'title': 'Low pH Correction',
-                'description': 'pH is too low. Consider pH adjustment to prevent corrosion.',
-                'type': 'treatment',
-                'priority': 'medium',
-                'is_implemented': False,
-                'created_at': timezone.now().isoformat(),
-                'source': 'dynamic'
-            })
-        elif ph > 8.5:
-            dynamic_recommendations.append({
-                'id': f'dynamic_ph_high_{int(timezone.now().timestamp())}',
-                'title': 'High pH Correction',
-                'description': 'pH is too high. Consider pH adjustment to prevent scaling.',
-                'type': 'treatment',
-                'priority': 'medium',
-                'is_implemented': False,
-                'created_at': timezone.now().isoformat(),
-                'source': 'dynamic'
-            })
+        if ph is not None:
+            if ph < 6.5:
+                dynamic_recommendations.append({
+                    'id': f'dynamic_ph_low_{int(timezone.now().timestamp())}',
+                    'title': 'Low pH Correction',
+                    'description': 'pH is too low. Consider pH adjustment to prevent corrosion.',
+                    'type': 'treatment',
+                    'priority': 'medium',
+                    'is_implemented': False,
+                    'created_at': timezone.now().isoformat(),
+                    'source': 'dynamic'
+                })
+            elif ph > 8.5:
+                dynamic_recommendations.append({
+                    'id': f'dynamic_ph_high_{int(timezone.now().timestamp())}',
+                    'title': 'High pH Correction',
+                    'description': 'pH is too high. Consider pH adjustment to prevent scaling.',
+                    'type': 'treatment',
+                    'priority': 'medium',
+                    'is_implemented': False,
+                    'created_at': timezone.now().isoformat(),
+                    'source': 'dynamic'
+                })
         
         # TDS-based recommendations
-        if tds > 500:
+        if tds is not None and tds > 500:
             dynamic_recommendations.append({
                 'id': f'dynamic_tds_high_{int(timezone.now().timestamp())}',
                 'title': 'High TDS Levels',
@@ -2352,7 +2405,7 @@ def calculate_water_analysis_with_recommendations_view(request):
             })
         
         # Sulphate-based recommendations
-        if sulphate > 250:
+        if sulphate is not None and sulphate > 250:
             dynamic_recommendations.append({
                 'id': f'dynamic_sulphate_high_{int(timezone.now().timestamp())}',
                 'title': 'High Sulphate Levels',
@@ -2387,14 +2440,21 @@ def calculate_water_analysis_with_recommendations_view(request):
                 'rsi_status': rsi_status,
                 'lr_status': lr_status,
                 'overall_status': overall_status,
-                'analysis_type': 'cooling'
+                'analysis_type': 'cooling',
+                'plant_id': plant_id,
+                'plant_name': plant.name if plant else None
             },
             'recommendations': recommendations
         })
             
     except Exception as e:
+        import traceback
+        error_details = str(e)
+        # Log the full traceback for debugging
+        print(f"Calculation error: {error_details}")
+        print(traceback.format_exc())
         return Response({
-            'error': f'Calculation error: {str(e)}'
+            'error': f'Calculation error: {error_details}'
         }, status=status.HTTP_400_BAD_REQUEST)
 
 # Debug view to test which endpoint is being hit
