@@ -699,26 +699,25 @@ def generate_monthly_report_pdf(analyses, water_system, analysis_type, month_str
                 margin-bottom: 20px;
             }}
             .graph-action-pair {{
-                display: grid;
-                grid-template-columns: 1fr 1fr;
+                display: flex;
+                flex-direction: row;
                 gap: 15px;
                 margin-bottom: 30px;
                 page-break-inside: avoid;
-                align-items: stretch;
+                align-items: center;
+                justify-content: center;
             }}
-            @media print {{
-                .graph-action-pair {{
-                    grid-template-columns: 1fr 1fr;
-                }}
-            }}
+
             .graph-container {{
                 page-break-inside: avoid;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                width: 100%;
+                width: 50%;
+                flex: 1;
                 overflow: hidden;
                 min-width: 0;
+                text-align: center;
             }}
             .graph-img {{
                 width: 100%;
@@ -726,6 +725,7 @@ def generate_monthly_report_pdf(analyses, water_system, analysis_type, month_str
                 max-width: 100%;
                 display: block;
                 object-fit: contain;
+                margin: 0 auto;
             }}
             .action-card {{
                 border: 2px solid #ddd;
@@ -736,7 +736,8 @@ def generate_monthly_report_pdf(analyses, water_system, analysis_type, month_str
                 box-shadow: 0 2px 4px rgba(0,0,0,0.1);
                 display: flex;
                 flex-direction: column;
-                width: 100%;
+                width: 50%;
+                flex: 1;
                 box-sizing: border-box;
                 overflow: hidden;
                 min-width: 0;
@@ -751,6 +752,8 @@ def generate_monthly_report_pdf(analyses, water_system, analysis_type, month_str
                 padding-bottom: 6px;
                 word-wrap: break-word;
                 overflow-wrap: break-word;
+                text-align: left;
+                width: 100%;
             }}
             .action-label {{
                 font-weight: bold;
@@ -759,6 +762,8 @@ def generate_monthly_report_pdf(analyses, water_system, analysis_type, month_str
                 margin-top: 6px;
                 margin-bottom: 3px;
                 word-wrap: break-word;
+                text-align: left;
+                width: 100%;
             }}
             .action-content {{
                 font-size: 9pt;
@@ -769,6 +774,8 @@ def generate_monthly_report_pdf(analyses, water_system, analysis_type, month_str
                 overflow-wrap: break-word;
                 hyphens: auto;
                 max-width: 100%;
+                text-align: left;
+                width: 100%;
             }}
             .action-trend {{
                 font-size: 9pt;
@@ -779,6 +786,8 @@ def generate_monthly_report_pdf(analyses, water_system, analysis_type, month_str
                 overflow: hidden;
                 text-overflow: ellipsis;
                 max-width: 100%;
+                text-align: left;
+                width: 100%;
             }}
         </style>
     </head>
@@ -955,9 +964,11 @@ def generate_yearly_report_pdf(analyses, water_system, analysis_type, year):
                 value_str = f'{avg_value:.2f}'
                 numeric_values.append(avg_value)
                 values_for_graph.append(avg_value)
-                # Parse month for graph
+                # Parse month for graph - use first day of month for yearly reports
                 try:
                     dt = datetime.strptime(month_key, '%b %Y')
+                    # Ensure it's the first day of the month for consistent monthly display
+                    dt = dt.replace(day=1)
                     dates_for_graph.append(dt)
                 except:
                     pass
@@ -1086,16 +1097,17 @@ def generate_yearly_report_pdf(analyses, water_system, analysis_type, year):
                 margin-bottom: 20px;
             }}
             .graph-action-pair {{
-                display: grid;
-                grid-template-columns: 1fr 1fr;
+                display: flex;
+                flex-direction: row;
                 gap: 15px;
                 margin-bottom: 30px;
                 page-break-inside: avoid;
-                align-items: stretch;
+                align-items: center;
+                justify-content: center;
             }}
             @media print {{
                 .graph-action-pair {{
-                    grid-template-columns: 1fr 1fr;
+                    flex-direction: row;
                 }}
             }}
             .graph-container {{
@@ -1103,9 +1115,11 @@ def generate_yearly_report_pdf(analyses, water_system, analysis_type, year):
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                width: 100%;
+                width: 50%;
+                flex: 1;
                 overflow: hidden;
                 min-width: 0;
+                text-align: center;
             }}
             .graph-img {{
                 width: 100%;
@@ -1113,6 +1127,7 @@ def generate_yearly_report_pdf(analyses, water_system, analysis_type, year):
                 max-width: 100%;
                 display: block;
                 object-fit: contain;
+                margin: 0 auto;
             }}
             .action-card {{
                 border: 2px solid #ddd;
@@ -1123,7 +1138,8 @@ def generate_yearly_report_pdf(analyses, water_system, analysis_type, year):
                 box-shadow: 0 2px 4px rgba(0,0,0,0.1);
                 display: flex;
                 flex-direction: column;
-                width: 100%;
+                width: 50%;
+                flex: 1;
                 box-sizing: border-box;
                 overflow: hidden;
                 min-width: 0;
@@ -1138,6 +1154,8 @@ def generate_yearly_report_pdf(analyses, water_system, analysis_type, year):
                 padding-bottom: 6px;
                 word-wrap: break-word;
                 overflow-wrap: break-word;
+                text-align: left;
+                width: 100%;
             }}
             .action-label {{
                 font-weight: bold;
@@ -1146,6 +1164,8 @@ def generate_yearly_report_pdf(analyses, water_system, analysis_type, year):
                 margin-top: 6px;
                 margin-bottom: 3px;
                 word-wrap: break-word;
+                text-align: left;
+                width: 100%;
             }}
             .action-content {{
                 font-size: 9pt;
@@ -1156,6 +1176,8 @@ def generate_yearly_report_pdf(analyses, water_system, analysis_type, year):
                 overflow-wrap: break-word;
                 hyphens: auto;
                 max-width: 100%;
+                text-align: left;
+                width: 100%;
             }}
             .action-trend {{
                 font-size: 9pt;
@@ -1166,6 +1188,8 @@ def generate_yearly_report_pdf(analyses, water_system, analysis_type, year):
                 overflow: hidden;
                 text-overflow: ellipsis;
                 max-width: 100%;
+                text-align: left;
+                width: 100%;
             }}
         </style>
     </head>
@@ -1216,7 +1240,7 @@ def generate_yearly_report_pdf(analyses, water_system, analysis_type, year):
         </table>
         
         <div class="curve-section">
-            <div class="curve-title">Curve</div>
+            <div class="curve-title">Graph</div>
             <div class="graphs-grid">
     """
     

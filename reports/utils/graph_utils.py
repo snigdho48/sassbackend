@@ -10,6 +10,7 @@ matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.figure import Figure
+from matplotlib.ticker import FixedLocator
 
 
 def parse_recommended_range(range_str):
@@ -80,8 +81,8 @@ def generate_trend_graph(param_name, dates, values, recommended_range, param_key
         
         valid_dates, valid_values = zip(*valid_data)
         
-        # Create figure
-        fig = Figure(figsize=(6, 3))
+        # Create figure with larger height
+        fig = Figure(figsize=(6, 4.5))
         ax = fig.add_subplot(111)
         
         # Plot actual values
@@ -104,29 +105,73 @@ def generate_trend_graph(param_name, dates, values, recommended_range, param_key
             elif min_val is not None:
                 ax.axhline(y=min_val, color='g', linestyle='--', linewidth=1.5, label='Recommended Min', alpha=0.7)
         
-        # Format x-axis dates - adjust based on date range
+        # Format x-axis dates - adjust based on date range and data points
         date_span = (max(valid_dates) - min(valid_dates)).days if len(valid_dates) > 1 else 0
         num_points = len(valid_dates)
         
-        if date_span <= 31:  # Daily data (within a month)
+        # Normalize all dates to first day of month for comparison
+        normalized_dates = [d.replace(day=1) if hasattr(d, 'replace') else d for d in valid_dates]
+        unique_month_count = len(set(d.strftime('%b %Y') if hasattr(d, 'strftime') else str(d) for d in normalized_dates))
+        
+        # Determine if this is monthly/yearly data or daily data
+        # If we have data spanning multiple months OR few data points spread across months, use monthly format
+        is_monthly_data = date_span > 60 or (date_span > 31 and unique_month_count > 1) or (num_points <= 12 and unique_month_count == num_points)
+        
+        if not is_monthly_data:  # Daily data (within a month)
             # Use daily format for monthly reports
-            ax.xaxis.set_major_formatter(mdates.DateFormatter('%d-%m'))
+            formatter = mdates.DateFormatter('%d-%m')
             # Use AutoDateLocator with max_ticks to prevent too many ticks
             locator = mdates.AutoDateLocator(maxticks=12)  # Max 12 ticks
-            ax.xaxis.set_major_locator(locator)
-        else:  # Monthly or longer data
+        else:  # Monthly or longer data (yearly reports)
             # Use monthly format for yearly reports
-            ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %Y'))
-            locator = mdates.AutoDateLocator(maxticks=12)  # Max 12 ticks
-            ax.xaxis.set_major_locator(locator)
+            formatter = mdates.DateFormatter('%b %Y')
+            # For yearly reports, use only the actual data dates (months with data)
+            # This ensures we only show months that have data points
+            unique_months = []
+            seen_months = set()
+            for date in valid_dates:
+                # Create a date at the first day of the month
+                if hasattr(date, 'replace'):
+                    month_start = date.replace(day=1)
+                else:
+                    # If it's already a datetime, use it directly
+                    month_start = date
+                month_key = month_start.strftime('%b %Y') if hasattr(month_start, 'strftime') else str(month_start)
+                if month_key not in seen_months:
+                    seen_months.add(month_key)
+                    unique_months.append(month_start)
+            
+            # Use FixedLocator with only the months that have data
+            if unique_months:
+                # Convert dates to numeric values for FixedLocator
+                unique_months_numeric = [mdates.date2num(d) for d in unique_months]
+                locator = FixedLocator(unique_months_numeric)
+            else:
+                locator = mdates.MonthLocator(interval=1)
         
+        # Set formatter first so we can format ticks correctly
+        ax.xaxis.set_major_formatter(formatter)
+        
+        # Set locator to generate tick positions
+        ax.xaxis.set_major_locator(locator)
+        
+        # Format labels and ensure no duplicates (fallback check)
         labels = ax.xaxis.get_majorticklabels()
+        seen_label_texts = set()
         for label in labels:
+            label_text = label.get_text().strip()
+            if label_text:
+                if label_text in seen_label_texts:
+                    # Hide duplicate
+                    label.set_text('')
+                    label.set_visible(False)
+                else:
+                    seen_label_texts.add(label_text)
             label.set_rotation(45)
             label.set_ha('right')
         
         # Labels and title
-        if date_span <= 31:  # Daily data
+        if not is_monthly_data:  # Daily data
             ax.set_xlabel('Date', fontsize=9)
         else:  # Monthly or longer
             ax.set_xlabel('Month & Year', fontsize=9)
