@@ -135,6 +135,12 @@ class Plant(models.Model):
             params['hardness'] = {'max': self.cooling_hardness_max}
         if self.cooling_alkalinity_max is not None:
             params['alkalinity'] = {'max': self.cooling_alkalinity_max}
+        if self.cooling_total_alkalinity_min is not None or self.cooling_total_alkalinity_max is not None:
+            params['total_alkalinity'] = {'min': self.cooling_total_alkalinity_min, 'max': self.cooling_total_alkalinity_max}
+        if self.cooling_temperature_min is not None or self.cooling_temperature_max is not None:
+            params['basin_temperature'] = {'min': self.cooling_temperature_min, 'max': self.cooling_temperature_max}
+        if self.cooling_hot_temperature_min is not None or self.cooling_hot_temperature_max is not None:
+            params['hot_temperature'] = {'min': self.cooling_hot_temperature_min, 'max': self.cooling_hot_temperature_max}
         
         # Only include optional parameters if enabled
         if self.cooling_chloride_enabled:
@@ -209,6 +215,12 @@ class WaterSystem(models.Model):
     cooling_tds_max = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     cooling_hardness_max = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     cooling_alkalinity_max = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    cooling_total_alkalinity_min = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True, help_text="Total Alkalinity minimum (ppm)")
+    cooling_total_alkalinity_max = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True, help_text="Total Alkalinity maximum (ppm)")
+    cooling_temperature_min = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True, help_text="Basin Temperature minimum (°C)")
+    cooling_temperature_max = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True, help_text="Basin Temperature maximum (°C)")
+    cooling_hot_temperature_min = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True, help_text="Hot Side Temperature minimum (°C)")
+    cooling_hot_temperature_max = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True, help_text="Hot Side Temperature maximum (°C)")
     cooling_chloride_max = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     cooling_chloride_enabled = models.BooleanField(default=False, help_text="Enable chloride monitoring")
     cooling_cycle_min = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
@@ -279,6 +291,12 @@ class WaterSystem(models.Model):
             params['hardness'] = {'max': self.cooling_hardness_max}
         if self.cooling_alkalinity_max is not None:
             params['alkalinity'] = {'max': self.cooling_alkalinity_max}
+        if self.cooling_total_alkalinity_min is not None or self.cooling_total_alkalinity_max is not None:
+            params['total_alkalinity'] = {'min': self.cooling_total_alkalinity_min, 'max': self.cooling_total_alkalinity_max}
+        if self.cooling_temperature_min is not None or self.cooling_temperature_max is not None:
+            params['basin_temperature'] = {'min': self.cooling_temperature_min, 'max': self.cooling_temperature_max}
+        if self.cooling_hot_temperature_min is not None or self.cooling_hot_temperature_max is not None:
+            params['hot_temperature'] = {'min': self.cooling_hot_temperature_min, 'max': self.cooling_hot_temperature_max}
         
         if self.cooling_chloride_enabled:
             params['chloride'] = {'max': self.cooling_chloride_max}
@@ -465,7 +483,13 @@ class WaterAnalysis(models.Model):
                 chloride = float(self.chloride) if self.chloride is not None else None
             else:
                 chloride = None  # Skip chloride if not enabled
-            temperature = float(self.temperature) if self.temperature is not None else None
+            # Use basin_temperature if available, otherwise use temperature (hot side)
+            temperature = None
+            if self.basin_temperature is not None:
+                temperature = float(self.basin_temperature)
+            elif self.temperature is not None:
+                temperature = float(self.temperature)
+            
             sulphate = float(self.sulphate) if self.sulphate is not None else None
             
             # If key inputs are missing, skip log-based indices to avoid math domain errors

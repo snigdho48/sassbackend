@@ -435,42 +435,161 @@ class ReportGenerationView(APIView):
     
     def post(self, request):
         user = request.user
-        report_type = request.data.get('report_type')
-        date_range = request.data.get('date_range', '30')
+        report_type = request.data.get('report_type')  # 'daily', 'monthly', 'yearly'
+        analysis_type = request.data.get('analysis_type')  # 'cooling' or 'boiler'
+        water_system_id = request.data.get('water_system_id')
+        date = request.data.get('date')  # For daily reports (YYYY-MM-DD)
+        month = request.data.get('month')  # For monthly reports (YYYY-MM)
+        year = request.data.get('year')  # For yearly reports (YYYY)
         
-        # Check if user can generate reports
-        if not hasattr(user, 'can_generate_reports') or not user.can_generate_reports:
-            # For now, allow all users to generate reports
-            pass
+        # Validate required fields
+        if not report_type:
+            return Response(
+                {'error': 'report_type is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if not analysis_type:
+            return Response(
+                {'error': 'analysis_type is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if not water_system_id:
+            return Response(
+                {'error': 'water_system_id is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validate date/month/year based on report type
+        if report_type == 'daily' and not date:
+            return Response(
+                {'error': 'date is required for daily reports'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if report_type == 'monthly' and not month:
+            return Response(
+                {'error': 'month is required for monthly reports'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if report_type == 'yearly' and not year:
+            return Response(
+                {'error': 'year is required for yearly reports'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         try:
-            # Get or create a report template
-            template, created = ReportTemplate.objects.get_or_create(
-                name=f'{report_type} Template',
-                defaults={
-                    'report_type': 'custom',
-                    'description': f'Template for {report_type} reports',
-                    'template_file': f'templates/reports/{report_type}_template.html'
-                }
+            # Get water system
+            from data_entry.models import WaterSystem
+            try:
+                water_system = WaterSystem.objects.get(id=water_system_id, is_active=True)
+            except WaterSystem.DoesNotExist:
+                return Response(
+                    {'error': 'Water system not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            # Check user access to water system
+            if user.is_general_user:
+                if user not in water_system.assigned_users.all():
+                    return Response(
+                        {'error': 'You do not have access to this water system'},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+            elif user.is_admin and not user.can_create_plants:
+                plant = water_system.plant
+                has_water_system_access = user in water_system.assigned_users.all()
+                has_plant_access = user in plant.owners.all() or plant.owner == user
+                if not (has_water_system_access or has_plant_access):
+                    return Response(
+                        {'error': 'You do not have access to this water system'},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+            
+            # Calculate date range based on report type
+            from datetime import datetime, timedelta
+            from django.utils import timezone as tz
+            
+            if report_type == 'daily':
+                start_date = datetime.strptime(date, '%Y-%m-%d').date()
+                end_date = start_date
+            elif report_type == 'monthly':
+                year_month = datetime.strptime(month, '%Y-%m')
+                start_date = year_month.replace(day=1).date()
+                # Get last day of month
+                if start_date.month == 12:
+                    end_date = start_date.replace(year=start_date.year + 1, month=1, day=1) - timedelta(days=1)
+                else:
+                    end_date = start_date.replace(month=start_date.month + 1, day=1) - timedelta(days=1)
+            elif report_type == 'yearly':
+                start_date = datetime(int(year), 1, 1).date()
+                end_date = datetime(int(year), 12, 31).date()
+            else:
+                return Response(
+                    {'error': 'Invalid report_type. Must be daily, monthly, or yearly'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Get water analyses for the date range and water system
+            from data_entry.models import WaterAnalysis
+            analyses = WaterAnalysis.objects.filter(
+                water_system=water_system,
+                analysis_type=analysis_type,
+                analysis_date__gte=start_date,
+                analysis_date__lte=end_date
+            ).order_by('analysis_date')
+            
+            # Filter by user if not admin
+            if not user.is_staff:
+                analyses = analyses.filter(user=user)
+            
+            # Check if there are any analyses
+            if not analyses.exists():
+                return Response(
+                    {'error': f'No water analysis data found for the selected {report_type} period'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            # Import PDF generator from utils
+            from reports.utils.report_generators import (
+                generate_daily_report_pdf,
+                generate_monthly_report_pdf,
+                generate_yearly_report_pdf
             )
+            from django.http import HttpResponse
             
-            # Create the actual report in database
-            report = GeneratedReport.objects.create(
-                user=user,
-                template=template,
-                title=f'{report_type} Report - {timezone.now().strftime("%Y-%m-%d")}',
-                parameters={
-                    'report_type': report_type,
-                    'date_range': date_range,
-                    'generated_at': timezone.now().isoformat()
-                }
+            # Generate PDF based on report type
+            if report_type == 'daily':
+                buffer = generate_daily_report_pdf(analyses, water_system, analysis_type, date)
+                filename = f'Daily_{analysis_type.capitalize()}_Water_Report_{date}.pdf'
+            elif report_type == 'monthly':
+                buffer = generate_monthly_report_pdf(analyses, water_system, analysis_type, month)
+                filename = f'Monthly_{analysis_type.capitalize()}_Water_Report_{month}.pdf'
+            elif report_type == 'yearly':
+                buffer = generate_yearly_report_pdf(analyses, water_system, analysis_type, year)
+                filename = f'Yearly_{analysis_type.capitalize()}_Water_Report_{year}.pdf'
+            else:
+                return Response(
+                    {'error': 'Invalid report_type. Must be daily, monthly, or yearly'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Create HTTP response with PDF
+            pdf_content = buffer.getvalue()
+            buffer.close()
+            
+            response = HttpResponse(content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            response.write(pdf_content)
+            return response
+            
+        except ValueError as e:
+            return Response(
+                {'error': f'Invalid date format: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
             )
-            
-            # Serialize the created report
-            serializer = GeneratedReportSerializer(report)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-            
         except Exception as e:
+            import traceback
+            print(f"Report generation error: {str(e)}")
+            print(traceback.format_exc())
             return Response(
                 {'error': f'Failed to generate report: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -491,115 +610,76 @@ class ReportDownloadView(APIView):
         try:
             report = GeneratedReport.objects.get(id=pk)
             
-            # Generate proper PDF using ReportLab
-            from reportlab.lib.pagesizes import letter
-            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-            from reportlab.lib.units import inch
-            from reportlab.lib import colors
-            from io import BytesIO
+            # Check user access
+            user = request.user
+            if not user.is_staff and report.user != user:
+                return Response(
+                    {'error': 'You do not have access to this report'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # Get report parameters
+            params = report.parameters
+            report_type = params.get('report_type', 'daily')
+            analysis_type = params.get('analysis_type', 'cooling')
+            water_system_id = params.get('water_system_id')
+            
+            # Get water system and analyses
+            from data_entry.models import WaterSystem, WaterAnalysis
+            from datetime import datetime
             from django.http import HttpResponse
             
-            # Create PDF buffer
-            buffer = BytesIO()
-            doc = SimpleDocTemplate(buffer, pagesize=letter)
-            story = []
+            try:
+                water_system = WaterSystem.objects.get(id=water_system_id)
+            except WaterSystem.DoesNotExist:
+                return Response(
+                    {'error': 'Water system not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
             
-            # Get styles
-            styles = getSampleStyleSheet()
-            title_style = ParagraphStyle(
-                'CustomTitle',
-                parent=styles['Heading1'],
-                fontSize=16,
-                spaceAfter=30,
-                alignment=1  # Center alignment
+            # Get analyses based on report parameters
+            start_date = datetime.fromisoformat(params['start_date']).date() if params.get('start_date') else None
+            end_date = datetime.fromisoformat(params['end_date']).date() if params.get('end_date') else None
+            
+            analyses = WaterAnalysis.objects.filter(
+                water_system=water_system,
+                analysis_type=analysis_type,
+                analysis_date__gte=start_date,
+                analysis_date__lte=end_date
+            ).order_by('analysis_date')
+            
+            # Filter by user if not admin
+            if not user.is_staff:
+                analyses = analyses.filter(user=user)
+            
+            # Import PDF generator from utils
+            from reports.utils.report_generators import (
+                generate_daily_report_pdf,
+                generate_monthly_report_pdf,
+                generate_yearly_report_pdf
             )
             
-            # Add title
-            story.append(Paragraph(f"<b>{report.title}</b>", title_style))
-            story.append(Spacer(1, 12))
-            
-            # Add report details
-            story.append(Paragraph(f"<b>Report Type:</b> {report.template.report_type if report.template else 'Custom'}", styles['Normal']))
-            story.append(Paragraph(f"<b>Generated:</b> {report.generated_at.strftime('%Y-%m-%d %H:%M:%S')}", styles['Normal']))
-            story.append(Paragraph(f"<b>User:</b> {report.user.get_full_name() or report.user.email}", styles['Normal']))
-            story.append(Spacer(1, 12))
-            
-            # Add parameters if available
-            if report.parameters:
-                story.append(Paragraph("<b>Report Parameters:</b>", styles['Heading2']))
-                for key, value in report.parameters.items():
-                    story.append(Paragraph(f"<b>{key}:</b> {value}", styles['Normal']))
-                story.append(Spacer(1, 12))
-            
-            # Add sample content based on report type
-            if report.template and 'daily' in report.template.report_type.lower():
-                story.append(Paragraph("<b>Daily Summary:</b>", styles['Heading2']))
-                story.append(Paragraph("This is a daily report containing key metrics and insights for the specified date range.", styles['Normal']))
-                story.append(Spacer(1, 12))
-                
-                # Add sample table
-                data = [
-                    ['Metric', 'Value', 'Status'],
-                    ['Total Entries', '150', 'Good'],
-                    ['Average Score', '85%', 'Excellent'],
-                    ['Categories', '8', 'Complete']
-                ]
-                table = Table(data)
-                table.setStyle(TableStyle([
-                    ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                    ('FONTSIZE', (0, 0), (-1, 0), 14),
-                    ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                    ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-                    ('GRID', (0, 0), (-1, -1), 1, colors.black)
-                ]))
-                story.append(table)
-            
-            elif report.template and 'weekly' in report.template.report_type.lower():
-                story.append(Paragraph("<b>Weekly Analysis:</b>", styles['Heading2']))
-                story.append(Paragraph("This weekly report provides comprehensive analysis of trends and patterns over the past week.", styles['Normal']))
-                story.append(Spacer(1, 12))
-                
-                # Add weekly metrics
-                story.append(Paragraph("<b>Weekly Metrics:</b>", styles['Heading3']))
-                story.append(Paragraph("• Total Data Points: 1,250", styles['Normal']))
-                story.append(Paragraph("• Average Performance: 87%", styles['Normal']))
-                story.append(Paragraph("• Top Category: Water Analysis", styles['Normal']))
-                story.append(Paragraph("• Growth Rate: +12%", styles['Normal']))
-            
-            elif report.template and 'monthly' in report.template.report_type.lower():
-                story.append(Paragraph("<b>Monthly Overview:</b>", styles['Heading2']))
-                story.append(Paragraph("This monthly report provides a comprehensive overview of all activities and performance metrics.", styles['Normal']))
-                story.append(Spacer(1, 12))
-                
-                # Add monthly summary
-                story.append(Paragraph("<b>Monthly Summary:</b>", styles['Heading3']))
-                story.append(Paragraph("• Total Reports Generated: 45", styles['Normal']))
-                story.append(Paragraph("• Data Quality Score: 92%", styles['Normal']))
-                story.append(Paragraph("• User Engagement: High", styles['Normal']))
-                story.append(Paragraph("• System Uptime: 99.8%", styles['Normal']))
-            
+            # Generate PDF based on report type
+            if report_type == 'daily':
+                date = params.get('date', start_date.isoformat() if start_date else '')
+                buffer = generate_daily_report_pdf(analyses, water_system, analysis_type, date)
+            elif report_type == 'monthly':
+                month = params.get('month', '')
+                buffer = generate_monthly_report_pdf(analyses, water_system, analysis_type, month)
+            elif report_type == 'yearly':
+                year = params.get('year', '')
+                buffer = generate_yearly_report_pdf(analyses, water_system, analysis_type, year)
             else:
-                story.append(Paragraph("<b>Custom Report:</b>", styles['Heading2']))
-                story.append(Paragraph("This is a custom report generated based on your specific requirements and parameters.", styles['Normal']))
-                story.append(Spacer(1, 12))
-                story.append(Paragraph("The report contains detailed analysis and insights relevant to your data and business needs.", styles['Normal']))
+                # Fallback to daily format
+                date = params.get('date', start_date.isoformat() if start_date else '')
+                buffer = generate_daily_report_pdf(analyses, water_system, analysis_type, date)
             
-            # Add footer
-            story.append(Spacer(1, 30))
-            story.append(Paragraph(f"<i>Report generated on {timezone.now().strftime('%Y-%m-%d %H:%M:%S')}</i>", styles['Italic']))
-            
-            # Build PDF
-            doc.build(story)
+            # Create HTTP response
             pdf_content = buffer.getvalue()
             buffer.close()
             
-            # Create HTTP response
             response = HttpResponse(content_type='application/pdf')
-            response['Content-Disposition'] = f'attachment; filename="{report.title}.pdf"'
+            response['Content-Disposition'] = f'attachment; filename="{report.title.replace(" ", "_")}.pdf"'
             response.write(pdf_content)
             return response
             
@@ -1194,8 +1274,13 @@ class WaterSystemViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         plant_id = self.request.query_params.get('plant_id')
+        system_type = self.request.query_params.get('system_type')  # Filter by cooling or boiler
         
         queryset = WaterSystem.objects.filter(is_active=True)
+        
+        # Filter by system type if provided
+        if system_type:
+            queryset = queryset.filter(system_type=system_type)
         
         # Filter by plant if provided
         if plant_id:

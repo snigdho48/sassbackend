@@ -53,8 +53,6 @@ INSTALLED_APPS = [
     # Third party apps
     'rest_framework',
     'rest_framework_simplejwt',
-    'crispy_forms',
-    'crispy_tailwind',
     'django_extensions',
     'debug_toolbar',
     'allauth',
@@ -199,9 +197,7 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Crispy Forms
-CRISPY_ALLOWED_TEMPLATE_PACKS = "tailwind"
-CRISPY_TEMPLATE_PACK = "tailwind"
+# Crispy Forms - Removed (not used with React frontend)
 
 
 
