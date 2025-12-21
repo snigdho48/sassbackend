@@ -847,7 +847,7 @@ def generate_monthly_report_pdf(analyses, water_system, analysis_type, month_str
         </table>
         
         <div class="curve-section">
-            <div class="curve-title">Curve</div>
+            <div class="curve-title">Graph</div>
             <div class="graphs-grid">
     """
     
