@@ -186,6 +186,21 @@ class UserProfileView(APIView):
         }
     )
     def put(self, request):
+        # Validate profile picture file size (1 MB = 1024 * 1024 bytes)
+        if 'profile_picture' in request.FILES:
+            profile_picture = request.FILES['profile_picture']
+            if profile_picture.size > 1024 * 1024:  # 1 MB
+                return Response(
+                    {'profile_picture': ['Image size must be less than 1MB.']},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            # Validate file type
+            if not profile_picture.content_type.startswith('image/'):
+                return Response(
+                    {'profile_picture': ['Please upload a valid image file.']},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
         serializer = UserSerializer(request.user, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
