@@ -9,6 +9,11 @@ from .report_generators import (
     generate_monthly_report_pdf,
     generate_yearly_report_pdf
 )
+from .report_queries import (
+    get_report_analyses_raw,
+    get_water_system_raw,
+    check_water_system_access_raw
+)
 
 __all__ = [
     'generate_trend_graph', 

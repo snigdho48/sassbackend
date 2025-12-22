@@ -421,13 +421,51 @@ class ReportsListView(APIView):
     def get(self, request):
         user = request.user
         
-        # Get user's reports or all reports for admin
-        if user.is_admin:
-            reports = GeneratedReport.objects.all()
-        else:
-            reports = GeneratedReport.objects.filter(user=user)
+        # Use raw SQL for faster report list fetching
+        from django.db import connection
         
-        serializer = GeneratedReportSerializer(reports, many=True)
+        with connection.cursor() as cursor:
+            if user.is_admin:
+                cursor.execute("""
+                    SELECT 
+                        gr.id,
+                        gr.user_id,
+                        gr.title,
+                        gr.parameters,
+                        gr.created_at,
+                        gr.updated_at
+                    FROM reports_generatedreport gr
+                    ORDER BY gr.created_at DESC
+                """)
+            else:
+                cursor.execute("""
+                    SELECT 
+                        gr.id,
+                        gr.user_id,
+                        gr.title,
+                        gr.parameters,
+                        gr.created_at,
+                        gr.updated_at
+                    FROM reports_generatedreport gr
+                    WHERE gr.user_id = %s
+                    ORDER BY gr.created_at DESC
+                """, [user.id])
+            
+            columns = [col[0] for col in cursor.description]
+            rows = cursor.fetchall()
+            
+            # Convert to dictionaries
+            reports_data = []
+            for row in rows:
+                report_dict = dict(zip(columns, row))
+                # Get full report objects for serializer compatibility
+                try:
+                    report = GeneratedReport.objects.get(id=report_dict['id'])
+                    reports_data.append(report)
+                except GeneratedReport.DoesNotExist:
+                    continue
+        
+        serializer = GeneratedReportSerializer(reports_data, many=True)
         return Response(serializer.data)
 
 class ReportGenerationView(APIView):
@@ -477,33 +515,6 @@ class ReportGenerationView(APIView):
             )
         
         try:
-            # Get water system
-            from data_entry.models import WaterSystem
-            try:
-                water_system = WaterSystem.objects.get(id=water_system_id, is_active=True)
-            except WaterSystem.DoesNotExist:
-                return Response(
-                    {'error': 'Water system not found'},
-                    status=status.HTTP_404_NOT_FOUND
-                )
-            
-            # Check user access to water system
-            if user.is_general_user:
-                if user not in water_system.assigned_users.all():
-                    return Response(
-                        {'error': 'You do not have access to this water system'},
-                        status=status.HTTP_403_FORBIDDEN
-                    )
-            elif user.is_admin and not user.can_create_plants:
-                plant = water_system.plant
-                has_water_system_access = user in water_system.assigned_users.all()
-                has_plant_access = user in plant.owners.all() or plant.owner == user
-                if not (has_water_system_access or has_plant_access):
-                    return Response(
-                        {'error': 'You do not have access to this water system'},
-                        status=status.HTTP_403_FORBIDDEN
-                    )
-            
             # Calculate date range based on report type
             from datetime import datetime, timedelta
             from django.utils import timezone as tz
@@ -528,25 +539,45 @@ class ReportGenerationView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            # Get water analyses for the date range and water system
-            from data_entry.models import WaterAnalysis
-            analyses = WaterAnalysis.objects.filter(
-                water_system=water_system,
-                analysis_type=analysis_type,
-                analysis_date__gte=start_date,
-                analysis_date__lte=end_date
-            ).order_by('analysis_date')
+            # Use raw SQL queries for faster data fetching
+            from reports.utils.report_queries import (
+                get_water_system_raw,
+                check_water_system_access_raw,
+                get_report_analyses_raw
+            )
             
-            # Filter by user if not admin
-            if not user.is_staff:
-                analyses = analyses.filter(user=user)
+            # Get water system using raw SQL
+            water_system = get_water_system_raw(water_system_id)
+            if not water_system:
+                return Response(
+                    {'error': 'Water system not found'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            # Check user access to water system using raw SQL
+            if not check_water_system_access_raw(user, water_system_id):
+                return Response(
+                    {'error': 'You do not have access to this water system'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # Get water analyses using raw SQL
+            analyses_list = get_report_analyses_raw(
+                user, water_system_id, analysis_type, start_date, end_date
+            )
             
             # Check if there are any analyses
-            if not analyses.exists():
+            if not analyses_list:
                 return Response(
                     {'error': f'No water analysis data found for the selected {report_type} period'},
                     status=status.HTTP_404_NOT_FOUND
                 )
+            
+            # Convert list to queryset-like object for PDF generators
+            # PDF generators use .first() and .exists(), so we need to handle that
+            from data_entry.models import WaterAnalysis
+            analysis_ids = [a.id for a in analyses_list]
+            analyses = WaterAnalysis.objects.filter(id__in=analysis_ids).order_by('analysis_date')
             
             # Import PDF generator from utils
             from reports.utils.report_generators import (
@@ -624,33 +655,35 @@ class ReportDownloadView(APIView):
             analysis_type = params.get('analysis_type', 'cooling')
             water_system_id = params.get('water_system_id')
             
-            # Get water system and analyses
-            from data_entry.models import WaterSystem, WaterAnalysis
+            # Get water system and analyses using raw SQL for faster access
+            from reports.utils.report_queries import (
+                get_water_system_raw,
+                get_report_analyses_raw
+            )
             from datetime import datetime
             from django.http import HttpResponse
+            from data_entry.models import WaterAnalysis
             
-            try:
-                water_system = WaterSystem.objects.get(id=water_system_id)
-            except WaterSystem.DoesNotExist:
+            # Get water system using raw SQL
+            water_system = get_water_system_raw(water_system_id)
+            if not water_system:
                 return Response(
                     {'error': 'Water system not found'},
                     status=status.HTTP_404_NOT_FOUND
                 )
             
-            # Get analyses based on report parameters
+            # Get analyses based on report parameters using raw SQL
             start_date = datetime.fromisoformat(params['start_date']).date() if params.get('start_date') else None
             end_date = datetime.fromisoformat(params['end_date']).date() if params.get('end_date') else None
             
-            analyses = WaterAnalysis.objects.filter(
-                water_system=water_system,
-                analysis_type=analysis_type,
-                analysis_date__gte=start_date,
-                analysis_date__lte=end_date
-            ).order_by('analysis_date')
+            # Get analyses using raw SQL
+            analyses_list = get_report_analyses_raw(
+                user, water_system_id, analysis_type, start_date, end_date
+            )
             
-            # Filter by user if not admin
-            if not user.is_staff:
-                analyses = analyses.filter(user=user)
+            # Convert list to queryset for PDF generators
+            analysis_ids = [a.id for a in analyses_list]
+            analyses = WaterAnalysis.objects.filter(id__in=analysis_ids).order_by('analysis_date')
             
             # Import PDF generator from utils
             from reports.utils.report_generators import (

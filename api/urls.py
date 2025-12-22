@@ -1,6 +1,7 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 from . import views
+from dashboard import views as dashboard_views
 
 urlpatterns = [
     # Authentication endpoints
@@ -22,6 +23,8 @@ urlpatterns = [
     path('data/<int:pk>/', views.TechnicalDataViewSet.as_view({'get': 'retrieve', 'put': 'update', 'delete': 'destroy'}), name='api_data_detail'),
     path('analytics/', views.AnalyticsView.as_view(), name='api_analytics'),
     path('dashboard/', views.DashboardDataView.as_view(), name='api_dashboard'),
+    path('dashboard/data/', dashboard_views.DashboardDataView.as_view(), name='api_dashboard_data'),
+    path('dashboard/parameter-trends/', dashboard_views.ParameterTrendView.as_view(), name='api_parameter_trends'),
     
     # Report endpoints
     path('reports/', views.ReportsListView.as_view(), name='api_reports'),
