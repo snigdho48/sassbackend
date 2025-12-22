@@ -19,6 +19,7 @@ class CustomUser(AbstractUser):
     )
     company = models.CharField(max_length=100, blank=True)
     phone = models.CharField(max_length=20, blank=True)
+    profile_picture = models.ImageField(upload_to='profile_pictures/', null=True, blank=True)
     # Every user must refer to an admin (except Super Admin)
     assigned_admin = models.ForeignKey(
         'self',

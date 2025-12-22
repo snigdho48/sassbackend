@@ -170,7 +170,11 @@ class UserProfileView(APIView):
     )
     def get(self, request):
         serializer = UserSerializer(request.user)
-        return Response(serializer.data)
+        user_data = serializer.data
+        # Add profile_picture URL if available
+        if request.user.profile_picture:
+            user_data['profile_picture'] = request.build_absolute_uri(request.user.profile_picture.url)
+        return Response(user_data)
     
     @swagger_auto_schema(
         operation_description="Update current user profile information",
@@ -185,7 +189,11 @@ class UserProfileView(APIView):
         serializer = UserSerializer(request.user, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
-            return Response(serializer.data)
+            # Return updated user data with profile_picture URL if available
+            user_data = serializer.data
+            if request.user.profile_picture:
+                user_data['profile_picture'] = request.build_absolute_uri(request.user.profile_picture.url)
+            return Response(user_data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class ChangePasswordView(APIView):

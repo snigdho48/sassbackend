@@ -18,16 +18,19 @@ class UserSerializer(serializers.ModelSerializer):
     assigned_admin = serializers.PrimaryKeyRelatedField(read_only=True)
     assigned_admin_email = serializers.CharField(source='assigned_admin.email', read_only=True)
     
+    profile_picture = serializers.ImageField(required=False, allow_null=True)
+    get_full_name = serializers.CharField(read_only=True)
+    
     class Meta:
         model = CustomUser
         fields = (
             'id', 'email', 'username', 'first_name', 'last_name', 'role', 'role_display',
-            'company', 'phone', 'date_joined', 'last_login', 'assigned_admin', 'assigned_admin_email',
+            'company', 'phone', 'profile_picture', 'date_joined', 'last_login', 'assigned_admin', 'assigned_admin_email',
             'is_active', 'is_super_admin', 'is_admin', 'is_general_user',
             'can_create_plants', 'can_create_admin_users', 'can_create_general_users',
-            'can_change_target_range'
+            'can_change_target_range', 'get_full_name'
         )
-        read_only_fields = ('id', 'date_joined', 'last_login', 'role_display', 'assigned_admin_email')
+        read_only_fields = ('id', 'date_joined', 'last_login', 'role_display', 'assigned_admin_email', 'get_full_name')
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, validators=[validate_password])
