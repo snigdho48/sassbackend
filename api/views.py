@@ -449,30 +449,30 @@ class ReportsListView(APIView):
         
         with connection.cursor() as cursor:
             if user.is_admin:
-                cursor.execute("""
-                    SELECT 
-                        gr.id,
-                        gr.user_id,
-                        gr.title,
-                        gr.parameters,
-                        gr.created_at,
-                        gr.updated_at
-                    FROM reports_generatedreport gr
-                    ORDER BY gr.created_at DESC
-                """)
+                    cursor.execute("""
+                        SELECT 
+                            gr.id,
+                            gr.user_id,
+                            gr.title,
+                            gr.parameters,
+                            gr.created_at,
+                            gr.updated_at
+                        FROM reports_generatedreport gr
+                        ORDER BY gr.created_at DESC
+                    """)
             else:
-                cursor.execute("""
-                    SELECT 
-                        gr.id,
-                        gr.user_id,
-                        gr.title,
-                        gr.parameters,
-                        gr.created_at,
-                        gr.updated_at
-                    FROM reports_generatedreport gr
-                    WHERE gr.user_id = %s
-                    ORDER BY gr.created_at DESC
-                """, [user.id])
+                    cursor.execute("""
+                        SELECT 
+                            gr.id,
+                            gr.user_id,
+                            gr.title,
+                            gr.parameters,
+                            gr.created_at,
+                            gr.updated_at
+                        FROM reports_generatedreport gr
+                        WHERE gr.user_id = %s
+                        ORDER BY gr.created_at DESC
+                    """, [user.id])
             
             columns = [col[0] for col in cursor.description]
             rows = cursor.fetchall()
