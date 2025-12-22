@@ -728,17 +728,43 @@ class AdminUserManagementView(APIView):
         """Get users - Super Admin sees all, Admin sees only users assigned to them"""
         user = request.user
         
+        # Get pagination parameters
+        page = int(request.query_params.get('page', 1))
+        page_size = int(request.query_params.get('page_size', 10))
+        
+        # Validate pagination parameters
+        if page < 1:
+            page = 1
+        if page_size < 1 or page_size > 100:
+            page_size = 10
+        
         # Super Admin can see all users
         if user.can_create_plants:  # Super Admin
-            users = CustomUser.objects.all()
+            users_queryset = CustomUser.objects.all().order_by('-date_joined')
         else:
             # Admin users can only see users assigned to them
-            users = CustomUser.objects.filter(
+            users_queryset = CustomUser.objects.filter(
                 assigned_admin=user
-            )
+            ).order_by('-date_joined')
+        
+        # Calculate pagination
+        total_count = users_queryset.count()
+        total_pages = (total_count + page_size - 1) // page_size  # Ceiling division
+        
+        # Apply pagination
+        start = (page - 1) * page_size
+        end = start + page_size
+        users = users_queryset[start:end]
         
         serializer = UserSerializer(users, many=True)
-        return Response(serializer.data)
+        
+        return Response({
+            'count': total_count,
+            'page': page,
+            'page_size': page_size,
+            'total_pages': total_pages,
+            'results': serializer.data
+        })
     
     def post(self, request):
         user = request.user
@@ -767,11 +793,10 @@ class AdminUserManagementView(APIView):
             # Super Admin creating another Super Admin doesn't need assigned_admin
             # But Super Admin creating an Admin must assign an admin (themselves or another admin)
             if requested_role == 'admin':
+                # If no assigned_admin is provided, default to the current Super Admin
                 if not assigned_admin_id:
-                    return Response(
-                        {'error': 'When creating an Admin user, you must assign an admin. For Super Admin creating Admin, assign yourself or another admin.'}, 
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
+                    assigned_admin_id = user.id
+                    request.data['assigned_admin'] = user.id
                 # Validate assigned_admin is an Admin or Super Admin
                 try:
                     assigned_admin = CustomUser.objects.get(id=assigned_admin_id)
@@ -796,13 +821,12 @@ class AdminUserManagementView(APIView):
             if not user.can_create_plants:  # Admin (not Super Admin)
                 # Already handled above, but ensure it's set
                 request.data['assigned_admin'] = user.id
-            # Super Admin creating General User: must assign an admin
+            # Super Admin creating General User: default to themselves if not specified
             else:
+                # If no assigned_admin is provided, default to the current Super Admin
                 if not assigned_admin_id:
-                    return Response(
-                        {'error': 'When creating a General User, you must assign an admin'}, 
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
+                    assigned_admin_id = user.id
+                    request.data['assigned_admin'] = user.id
                 # Validate assigned_admin is an Admin or Super Admin
                 try:
                     assigned_admin = CustomUser.objects.get(id=assigned_admin_id)
