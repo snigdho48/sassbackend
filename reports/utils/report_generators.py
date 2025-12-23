@@ -220,11 +220,9 @@ def generate_daily_report_pdf(analyses, water_system, analysis_type, report_date
                 overflow: hidden;
             }}
             table th:first-child {{
-                border-top-left-radius: 8px;
                 border-left: 2px solid {primary_color};
             }}
             table th:last-child {{
-                border-top-right-radius: 8px;
                 border-right: 2px solid {primary_color};
             }}
             table th:not(:first-child):not(:last-child) {{
@@ -309,12 +307,8 @@ def generate_daily_report_pdf(analyses, water_system, analysis_type, report_date
                 border-left: 1px solid rgba(255, 255, 255, 0.3);
                 border-right: 1px solid rgba(255, 255, 255, 0.3);
             }}
-            table.action-table th:first-child {{
-                border-top-left-radius: 6px;
-            }}
-            table.action-table th:last-child {{
-                border-top-right-radius: 6px;
-            }}
+
+
             table.action-table td {{
                 padding: 12px;
                 border: 1px solid #d1d5db;
@@ -846,11 +840,9 @@ def generate_monthly_report_pdf(analyses, water_system, analysis_type, month_str
                 overflow: hidden;
             }}
             table th:first-child {{
-                border-top-left-radius: 8px;
                 border-left: 2px solid {primary_color};
             }}
             table th:last-child {{
-                border-top-right-radius: 8px;
                 border-right: 2px solid {primary_color};
             }}
             table th:not(:first-child):not(:last-child) {{
@@ -858,14 +850,12 @@ def generate_monthly_report_pdf(analyses, water_system, analysis_type, month_str
                 border-right: 1px solid rgba(255, 255, 255, 0.3);
             }}
             table th:first-child {{
-                border-top-left-radius: 6px;
                 width: 15%;
             }}
             table th:nth-child(2) {{
                 width: 20%;
             }}
             table th:last-child {{
-                border-top-right-radius: 6px;
                 width: 20%;
             }}
             table td {{
@@ -1306,11 +1296,9 @@ def generate_yearly_report_pdf(analyses, water_system, analysis_type, year):
                 overflow: hidden;
             }}
             table th:first-child {{
-                border-top-left-radius: 8px;
                 border-left: 2px solid {primary_color};
             }}
             table th:last-child {{
-                border-top-right-radius: 8px;
                 border-right: 2px solid {primary_color};
             }}
             table th:not(:first-child):not(:last-child) {{
@@ -1318,14 +1306,12 @@ def generate_yearly_report_pdf(analyses, water_system, analysis_type, year):
                 border-right: 1px solid rgba(255, 255, 255, 0.3);
             }}
             table th:first-child {{
-                border-top-left-radius: 6px;
                 width: 15%;
             }}
             table th:nth-child(2) {{
                 width: 20%;
             }}
             table th:last-child {{
-                border-top-right-radius: 6px;
                 width: 20%;
             }}
             table td {{
