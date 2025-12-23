@@ -192,27 +192,44 @@ def generate_daily_report_pdf(analyses, water_system, analysis_type, report_date
             }}
             table {{
                 width: 100%;
-                border-collapse: separate;
-                border-spacing: 0;
+                border-collapse: collapse;
                 margin-bottom: 20px;
                 font-size: 9pt;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                border-radius: 6px;
+                border: 2px solid {primary_color};
                 overflow: hidden;
                 table-layout: fixed;
+                background-color: transparent;
             }}
             table th {{
-                background: linear-gradient(135deg, {primary_color} 0%, {primary_color}dd 100%);
+                background-color: {primary_color};
                 color: white;
-                padding: 12px 10px;
+                padding: 14px 12px;
                 text-align: left;
-                font-weight: 600;
+                font-weight: 700;
                 font-size: 9.5pt;
-                border: none;
-                border-bottom: 2px solid rgba(255,255,255,0.2);
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                border-bottom: 3px solid {primary_color};
                 text-transform: uppercase;
-                letter-spacing: 0.5px;
+                letter-spacing: 0.8px;
                 width: auto;
+                height: 50px;
+                min-height: 50px;
+                max-height: 50px;
+                vertical-align: middle;
+                line-height: 1.3;
+                overflow: hidden;
+            }}
+            table th:first-child {{
+                border-top-left-radius: 8px;
+                border-left: 2px solid {primary_color};
+            }}
+            table th:last-child {{
+                border-top-right-radius: 8px;
+                border-right: 2px solid {primary_color};
+            }}
+            table th:not(:first-child):not(:last-child) {{
+                border-left: 1px solid rgba(255, 255, 255, 0.3);
+                border-right: 1px solid rgba(255, 255, 255, 0.3);
             }}
             table.analysis-table th:nth-child(1) {{
                 width: 20%;
@@ -226,31 +243,25 @@ def generate_daily_report_pdf(analyses, water_system, analysis_type, report_date
             table.analysis-table th:nth-child(4) {{
                 width: 40%;
             }}
-            table th:first-child {{
-                border-top-left-radius: 6px;
-            }}
-            table th:last-child {{
-                border-top-right-radius: 6px;
-            }}
             table td {{
-                padding: 10px;
-                border: none;
-                border-bottom: 1px solid #e5e7eb;
+                padding: 12px;
+                border: 1px solid #d1d5db;
+                border-top: none;
                 word-wrap: break-word;
                 overflow-wrap: break-word;
                 background-color: transparent;
             }}
             table.analysis-table tbody tr:nth-child(even) td {{
-                background-color: transparent;
+                background-color: rgba(249, 250, 251, 0.5);
             }}
             table.analysis-table tbody tr:nth-child(odd) td {{
                 background-color: transparent;
             }}
             table.analysis-table tbody tr:hover td {{
-                background-color: transparent;
+                background-color: rgba(243, 244, 246, 0.7);
             }}
             table.analysis-table tbody tr:last-child td {{
-                border-bottom: none;
+                border-bottom: 1px solid #d1d5db;
             }}
             table.analysis-table tbody tr:last-child td:first-child {{
                 border-bottom-left-radius: 6px;
@@ -260,25 +271,43 @@ def generate_daily_report_pdf(analyses, water_system, analysis_type, report_date
             }}
             table.action-table {{
                 width: 100%;
-                border-collapse: separate;
-                border-spacing: 0;
+                border-collapse: collapse;
                 margin-bottom: 20px;
                 font-size: 9pt;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                border-radius: 6px;
+                border: 2px solid {primary_color};
+                border-radius: 8px;
                 overflow: hidden;
+                background-color: transparent;
             }}
             table.action-table th {{
-                background: linear-gradient(135deg, {primary_color} 0%, {primary_color}dd 100%);
+                background-color: {primary_color};
                 color: white;
-                padding: 12px 10px;
+                padding: 14px 12px;
                 text-align: left;
-                font-weight: 600;
+                font-weight: 700;
                 font-size: 9.5pt;
-                border: none;
-                border-bottom: 2px solid rgba(255,255,255,0.2);
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                border-bottom: 3px solid {primary_color};
                 text-transform: uppercase;
-                letter-spacing: 0.5px;
+                letter-spacing: 0.8px;
+                height: 50px;
+                min-height: 50px;
+                max-height: 50px;
+                vertical-align: middle;
+                line-height: 1.3;
+                overflow: hidden;
+            }}
+            table.action-table th:first-child {{
+                border-top-left-radius: 8px;
+                border-left: 2px solid {primary_color};
+            }}
+            table.action-table th:last-child {{
+                border-top-right-radius: 8px;
+                border-right: 2px solid {primary_color};
+            }}
+            table.action-table th:not(:first-child):not(:last-child) {{
+                border-left: 1px solid rgba(255, 255, 255, 0.3);
+                border-right: 1px solid rgba(255, 255, 255, 0.3);
             }}
             table.action-table th:first-child {{
                 border-top-left-radius: 6px;
@@ -287,24 +316,24 @@ def generate_daily_report_pdf(analyses, water_system, analysis_type, report_date
                 border-top-right-radius: 6px;
             }}
             table.action-table td {{
-                padding: 10px;
-                border: none;
-                border-bottom: 1px solid #e5e7eb;
+                padding: 12px;
+                border: 1px solid #d1d5db;
+                border-top: none;
                 word-wrap: break-word;
                 overflow-wrap: break-word;
-                background-color: #ffffff;
+                background-color: transparent;
             }}
             table.action-table tbody tr:nth-child(even) td {{
-                background-color: transparent;
+                background-color: rgba(249, 250, 251, 0.5);
             }}
             table.action-table tbody tr:nth-child(odd) td {{
                 background-color: transparent;
             }}
             table.action-table tbody tr.within-range td {{
-                background-color: transparent;
+                background-color: rgba(240, 253, 244, 0.3);
             }}
             table.action-table tbody tr.out-of-range td {{
-                background-color: transparent;
+                background-color: rgba(254, 242, 242, 0.3);
             }}
             table.action-table tbody tr:last-child td {{
                 border-bottom: none;
@@ -789,27 +818,44 @@ def generate_monthly_report_pdf(analyses, water_system, analysis_type, month_str
             }}
             table {{
                 width: 100%;
-                border-collapse: separate;
-                border-spacing: 0;
+                border-collapse: collapse;
                 margin-bottom: 20px;
                 font-size: 7pt;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                border-radius: 6px;
+                border: 2px solid {primary_color};
                 overflow: hidden;
                 table-layout: fixed;
+                background-color: transparent;
             }}
             table th {{
-                background: linear-gradient(135deg, {primary_color} 0%, {primary_color}dd 100%);
+                background-color: {primary_color};
                 color: white;
-                padding: 8px 6px;
+                padding: 10px 8px;
                 text-align: left;
-                font-weight: 600;
+                font-weight: 700;
                 font-size: 7.5pt;
-                border: none;
-                border-bottom: 2px solid rgba(255,255,255,0.2);
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                border-bottom: 3px solid {primary_color};
                 text-transform: uppercase;
-                letter-spacing: 0.3px;
+                letter-spacing: 0.5px;
                 width: auto;
+                height: 40px;
+                min-height: 40px;
+                max-height: 40px;
+                vertical-align: middle;
+                line-height: 1.3;
+                overflow: hidden;
+            }}
+            table th:first-child {{
+                border-top-left-radius: 8px;
+                border-left: 2px solid {primary_color};
+            }}
+            table th:last-child {{
+                border-top-right-radius: 8px;
+                border-right: 2px solid {primary_color};
+            }}
+            table th:not(:first-child):not(:last-child) {{
+                border-left: 1px solid rgba(255, 255, 255, 0.3);
+                border-right: 1px solid rgba(255, 255, 255, 0.3);
             }}
             table th:first-child {{
                 border-top-left-radius: 6px;
@@ -823,21 +869,21 @@ def generate_monthly_report_pdf(analyses, water_system, analysis_type, month_str
                 width: 20%;
             }}
             table td {{
-                padding: 6px;
-                border: none;
-                border-bottom: 1px solid #e5e7eb;
+                padding: 8px;
+                border: 1px solid #d1d5db;
+                border-top: none;
                 word-wrap: break-word;
                 overflow-wrap: break-word;
                 background-color: transparent;
             }}
             table tbody tr:nth-child(even) td {{
-                background-color: transparent;
+                background-color: rgba(249, 250, 251, 0.5);
             }}
             table tbody tr:nth-child(odd) td {{
                 background-color: transparent;
             }}
             table tbody tr:last-child td {{
-                border-bottom: none;
+                border-bottom: 1px solid #d1d5db;
             }}
             table tbody tr:last-child td:first-child {{
                 border-bottom-left-radius: 6px;
@@ -1232,27 +1278,44 @@ def generate_yearly_report_pdf(analyses, water_system, analysis_type, year):
             }}
             table {{
                 width: 100%;
-                border-collapse: separate;
-                border-spacing: 0;
+                border-collapse: collapse;
                 margin-bottom: 20px;
                 font-size: 7pt;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-                border-radius: 6px;
+                border: 2px solid {primary_color};
                 overflow: hidden;
                 table-layout: fixed;
+                background-color: transparent;
             }}
             table th {{
-                background: linear-gradient(135deg, {primary_color} 0%, {primary_color}dd 100%);
+                background-color: {primary_color};
                 color: white;
-                padding: 8px 6px;
+                padding: 10px 8px;
                 text-align: left;
-                font-weight: 600;
+                font-weight: 700;
                 font-size: 7.5pt;
-                border: none;
-                border-bottom: 2px solid rgba(255,255,255,0.2);
+                border: 1px solid rgba(255, 255, 255, 0.3);
+                border-bottom: 3px solid {primary_color};
                 text-transform: uppercase;
-                letter-spacing: 0.3px;
+                letter-spacing: 0.5px;
                 width: auto;
+                height: 40px;
+                min-height: 40px;
+                max-height: 40px;
+                vertical-align: middle;
+                line-height: 1.3;
+                overflow: hidden;
+            }}
+            table th:first-child {{
+                border-top-left-radius: 8px;
+                border-left: 2px solid {primary_color};
+            }}
+            table th:last-child {{
+                border-top-right-radius: 8px;
+                border-right: 2px solid {primary_color};
+            }}
+            table th:not(:first-child):not(:last-child) {{
+                border-left: 1px solid rgba(255, 255, 255, 0.3);
+                border-right: 1px solid rgba(255, 255, 255, 0.3);
             }}
             table th:first-child {{
                 border-top-left-radius: 6px;
@@ -1266,21 +1329,21 @@ def generate_yearly_report_pdf(analyses, water_system, analysis_type, year):
                 width: 20%;
             }}
             table td {{
-                padding: 6px;
-                border: none;
-                border-bottom: 1px solid #e5e7eb;
+                padding: 8px;
+                border: 1px solid #d1d5db;
+                border-top: none;
                 word-wrap: break-word;
                 overflow-wrap: break-word;
                 background-color: transparent;
             }}
             table tbody tr:nth-child(even) td {{
-                background-color: transparent;
+                background-color: rgba(249, 250, 251, 0.5);
             }}
             table tbody tr:nth-child(odd) td {{
                 background-color: transparent;
             }}
             table tbody tr:last-child td {{
-                border-bottom: none;
+                border-bottom: 1px solid #d1d5db;
             }}
             table tbody tr:last-child td:first-child {{
                 border-bottom-left-radius: 6px;
