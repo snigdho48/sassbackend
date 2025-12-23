@@ -12,6 +12,7 @@ from reports.pdf_generator import (
     get_parameter_info,
     get_analysis_value,
     get_logo_base64,
+    get_icon_base64,
     format_recommended_range
 )
 
@@ -38,6 +39,9 @@ def generate_daily_report_pdf(analyses, water_system, analysis_type, report_date
     
     # Get logo
     logo_base64 = get_logo_base64()
+    
+    # Get icon for watermark
+    icon_base64 = get_icon_base64()
     
     # Get parameter info - pass analysis so temperature can be included if it has values
     param_info = get_parameter_info(analysis_type, water_system, analysis)
@@ -124,6 +128,9 @@ def generate_daily_report_pdf(analyses, water_system, analysis_type, report_date
                 size: A4;
                 margin: 1cm;
             }}
+            body::before {{
+                {f'content: ""; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 450px; height: 450px; max-width: 100%; max-height: 100%; background-image: url("{icon_base64}"); background-size: contain; background-repeat: no-repeat; background-position: center; opacity: 0.06; z-index: -1; pointer-events: none;' if icon_base64 else ''}
+            }}
             * {{
                 margin: 0;
                 padding: 0;
@@ -134,6 +141,7 @@ def generate_daily_report_pdf(analyses, water_system, analysis_type, report_date
                 font-size: 10pt;
                 color: #000;
                 line-height: 1.4;
+                position: relative;
             }}
             .header {{
                 margin-bottom: 20px;
@@ -184,26 +192,137 @@ def generate_daily_report_pdf(analyses, water_system, analysis_type, report_date
             }}
             table {{
                 width: 100%;
-                border-collapse: collapse;
+                border-collapse: separate;
+                border-spacing: 0;
                 margin-bottom: 20px;
                 font-size: 9pt;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                border-radius: 6px;
+                overflow: hidden;
+                table-layout: fixed;
             }}
             table th {{
-                background-color: {primary_color};
+                background: linear-gradient(135deg, {primary_color} 0%, {primary_color}dd 100%);
                 color: white;
-                padding: 10px 8px;
+                padding: 12px 10px;
                 text-align: left;
-                font-weight: bold;
-                border: 1px solid #ddd;
+                font-weight: 600;
+                font-size: 9.5pt;
+                border: none;
+                border-bottom: 2px solid rgba(255,255,255,0.2);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                width: auto;
+            }}
+            table.analysis-table th:nth-child(1) {{
+                width: 20%;
+            }}
+            table.analysis-table th:nth-child(2) {{
+                width: 25%;
+            }}
+            table.analysis-table th:nth-child(3) {{
+                width: 15%;
+            }}
+            table.analysis-table th:nth-child(4) {{
+                width: 40%;
+            }}
+            table th:first-child {{
+                border-top-left-radius: 6px;
+            }}
+            table th:last-child {{
+                border-top-right-radius: 6px;
             }}
             table td {{
-                padding: 8px;
-                border: 1px solid #ddd;
+                padding: 10px;
+                border: none;
+                border-bottom: 1px solid #e5e7eb;
                 word-wrap: break-word;
                 overflow-wrap: break-word;
+                background-color: transparent;
             }}
-            table.analysis-table td {{
-                background-color: white;
+            table.analysis-table tbody tr:nth-child(even) td {{
+                background-color: transparent;
+            }}
+            table.analysis-table tbody tr:nth-child(odd) td {{
+                background-color: transparent;
+            }}
+            table.analysis-table tbody tr:hover td {{
+                background-color: transparent;
+            }}
+            table.analysis-table tbody tr:last-child td {{
+                border-bottom: none;
+            }}
+            table.analysis-table tbody tr:last-child td:first-child {{
+                border-bottom-left-radius: 6px;
+            }}
+            table.analysis-table tbody tr:last-child td:last-child {{
+                border-bottom-right-radius: 6px;
+            }}
+            table.action-table {{
+                width: 100%;
+                border-collapse: separate;
+                border-spacing: 0;
+                margin-bottom: 20px;
+                font-size: 9pt;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                border-radius: 6px;
+                overflow: hidden;
+            }}
+            table.action-table th {{
+                background: linear-gradient(135deg, {primary_color} 0%, {primary_color}dd 100%);
+                color: white;
+                padding: 12px 10px;
+                text-align: left;
+                font-weight: 600;
+                font-size: 9.5pt;
+                border: none;
+                border-bottom: 2px solid rgba(255,255,255,0.2);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }}
+            table.action-table th:first-child {{
+                border-top-left-radius: 6px;
+            }}
+            table.action-table th:last-child {{
+                border-top-right-radius: 6px;
+            }}
+            table.action-table td {{
+                padding: 10px;
+                border: none;
+                border-bottom: 1px solid #e5e7eb;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
+                background-color: #ffffff;
+            }}
+            table.action-table tbody tr:nth-child(even) td {{
+                background-color: transparent;
+            }}
+            table.action-table tbody tr:nth-child(odd) td {{
+                background-color: transparent;
+            }}
+            table.action-table tbody tr.within-range td {{
+                background-color: transparent;
+            }}
+            table.action-table tbody tr.out-of-range td {{
+                background-color: transparent;
+            }}
+            table.action-table tbody tr:last-child td {{
+                border-bottom: none;
+            }}
+            table.action-table tbody tr:last-child td:first-child {{
+                border-bottom-left-radius: 6px;
+            }}
+            table.action-table tbody tr:last-child td:last-child {{
+                border-bottom-right-radius: 6px;
+            }}
+            .action-icon {{
+                display: inline-block;
+                margin-right: 6px;
+                font-weight: bold;
+                font-size: 10pt;
+            }}
+            .action-text {{
+                display: inline-block;
             }}
             .recommendations-title {{
                 background-color: {primary_color};
@@ -225,11 +344,11 @@ def generate_daily_report_pdf(analyses, water_system, analysis_type, report_date
                 border-radius: 4px;
                 padding: 12px;
                 page-break-inside: avoid;
-                background-color: #ffffff;
+                background-color: transparent;
             }}
             .recommendation-card.dynamic {{
                 border-color: #93c5fd;
-                background-color: #eff6ff;
+                background-color: transparent;
             }}
             .recommendation-header {{
                 display: flex;
@@ -482,6 +601,9 @@ def generate_monthly_report_pdf(analyses, water_system, analysis_type, month_str
     # Get logo
     logo_base64 = get_logo_base64()
     
+    # Get icon for watermark
+    icon_base64 = get_icon_base64()
+    
     # Get parameter info - use first analysis if available, otherwise None
     first_analysis = analyses.first() if analyses.exists() else None
     param_info = get_parameter_info(analysis_type, water_system, first_analysis)
@@ -614,6 +736,9 @@ def generate_monthly_report_pdf(analyses, water_system, analysis_type, month_str
                 size: A4;
                 margin: 1cm;
             }}
+            body::before {{
+                {f'content: ""; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 450px; height: 450px; max-width: 100%; max-height: 100%; background-image: url("{icon_base64}"); background-size: contain; background-repeat: no-repeat; background-position: center; opacity: 0.06; z-index: -1; pointer-events: none;' if icon_base64 else ''}
+            }}
             * {{
                 margin: 0;
                 padding: 0;
@@ -624,6 +749,7 @@ def generate_monthly_report_pdf(analyses, water_system, analysis_type, month_str
                 font-size: 9pt;
                 color: #000;
                 line-height: 1.4;
+                position: relative;
             }}
             .header {{
                 margin-bottom: 20px;
@@ -663,23 +789,61 @@ def generate_monthly_report_pdf(analyses, water_system, analysis_type, month_str
             }}
             table {{
                 width: 100%;
-                border-collapse: collapse;
+                border-collapse: separate;
+                border-spacing: 0;
                 margin-bottom: 20px;
                 font-size: 7pt;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                border-radius: 6px;
+                overflow: hidden;
+                table-layout: fixed;
             }}
             table th {{
-                background-color: {primary_color};
+                background: linear-gradient(135deg, {primary_color} 0%, {primary_color}dd 100%);
                 color: white;
-                padding: 6px 4px;
+                padding: 8px 6px;
                 text-align: left;
-                font-weight: bold;
-                border: 1px solid #ddd;
+                font-weight: 600;
+                font-size: 7.5pt;
+                border: none;
+                border-bottom: 2px solid rgba(255,255,255,0.2);
+                text-transform: uppercase;
+                letter-spacing: 0.3px;
+                width: auto;
+            }}
+            table th:first-child {{
+                border-top-left-radius: 6px;
+                width: 15%;
+            }}
+            table th:nth-child(2) {{
+                width: 20%;
+            }}
+            table th:last-child {{
+                border-top-right-radius: 6px;
+                width: 20%;
             }}
             table td {{
-                padding: 4px;
-                border: 1px solid #ddd;
+                padding: 6px;
+                border: none;
+                border-bottom: 1px solid #e5e7eb;
                 word-wrap: break-word;
                 overflow-wrap: break-word;
+                background-color: transparent;
+            }}
+            table tbody tr:nth-child(even) td {{
+                background-color: transparent;
+            }}
+            table tbody tr:nth-child(odd) td {{
+                background-color: transparent;
+            }}
+            table tbody tr:last-child td {{
+                border-bottom: none;
+            }}
+            table tbody tr:last-child td:first-child {{
+                border-bottom-left-radius: 6px;
+            }}
+            table tbody tr:last-child td:last-child {{
+                border-bottom-right-radius: 6px;
             }}
             .curve-section {{
                 margin: 30px 0;
@@ -731,7 +895,7 @@ def generate_monthly_report_pdf(analyses, water_system, analysis_type, month_str
                 border: 2px solid #ddd;
                 border-radius: 6px;
                 padding: 10px;
-                background-color: #f9f9f9;
+                background-color: transparent;
                 page-break-inside: avoid;
                 box-shadow: 0 2px 4px rgba(0,0,0,0.1);
                 display: flex;
@@ -913,6 +1077,9 @@ def generate_yearly_report_pdf(analyses, water_system, analysis_type, year):
     # Get logo
     logo_base64 = get_logo_base64()
     
+    # Get icon for watermark
+    icon_base64 = get_icon_base64()
+    
     # Get parameter info - use first analysis if available, otherwise None
     first_analysis = analyses.first() if analyses.exists() else None
     param_info = get_parameter_info(analysis_type, water_system, first_analysis)
@@ -1012,6 +1179,9 @@ def generate_yearly_report_pdf(analyses, water_system, analysis_type, year):
                 size: A4;
                 margin: 1cm;
             }}
+            body::before {{
+                {f'content: ""; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 450px; height: 450px; max-width: 100%; max-height: 100%; background-image: url("{icon_base64}"); background-size: contain; background-repeat: no-repeat; background-position: center; opacity: 0.06; z-index: -1; pointer-events: none;' if icon_base64 else ''}
+            }}
             * {{
                 margin: 0;
                 padding: 0;
@@ -1022,6 +1192,7 @@ def generate_yearly_report_pdf(analyses, water_system, analysis_type, year):
                 font-size: 8pt;
                 color: #000;
                 line-height: 1.4;
+                position: relative;
             }}
             .header {{
                 margin-bottom: 20px;
@@ -1061,23 +1232,61 @@ def generate_yearly_report_pdf(analyses, water_system, analysis_type, year):
             }}
             table {{
                 width: 100%;
-                border-collapse: collapse;
+                border-collapse: separate;
+                border-spacing: 0;
                 margin-bottom: 20px;
                 font-size: 7pt;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                border-radius: 6px;
+                overflow: hidden;
+                table-layout: fixed;
             }}
             table th {{
-                background-color: {primary_color};
+                background: linear-gradient(135deg, {primary_color} 0%, {primary_color}dd 100%);
                 color: white;
-                padding: 6px 4px;
+                padding: 8px 6px;
                 text-align: left;
-                font-weight: bold;
-                border: 1px solid #ddd;
+                font-weight: 600;
+                font-size: 7.5pt;
+                border: none;
+                border-bottom: 2px solid rgba(255,255,255,0.2);
+                text-transform: uppercase;
+                letter-spacing: 0.3px;
+                width: auto;
+            }}
+            table th:first-child {{
+                border-top-left-radius: 6px;
+                width: 15%;
+            }}
+            table th:nth-child(2) {{
+                width: 20%;
+            }}
+            table th:last-child {{
+                border-top-right-radius: 6px;
+                width: 20%;
             }}
             table td {{
-                padding: 4px;
-                border: 1px solid #ddd;
+                padding: 6px;
+                border: none;
+                border-bottom: 1px solid #e5e7eb;
                 word-wrap: break-word;
                 overflow-wrap: break-word;
+                background-color: transparent;
+            }}
+            table tbody tr:nth-child(even) td {{
+                background-color: transparent;
+            }}
+            table tbody tr:nth-child(odd) td {{
+                background-color: transparent;
+            }}
+            table tbody tr:last-child td {{
+                border-bottom: none;
+            }}
+            table tbody tr:last-child td:first-child {{
+                border-bottom-left-radius: 6px;
+            }}
+            table tbody tr:last-child td:last-child {{
+                border-bottom-right-radius: 6px;
             }}
             .curve-section {{
                 margin: 30px 0;
@@ -1133,7 +1342,7 @@ def generate_yearly_report_pdf(analyses, water_system, analysis_type, year):
                 border: 2px solid #ddd;
                 border-radius: 6px;
                 padding: 10px;
-                background-color: #f9f9f9;
+                background-color: transparent;
                 page-break-inside: avoid;
                 box-shadow: 0 2px 4px rgba(0,0,0,0.1);
                 display: flex;

@@ -279,3 +279,28 @@ def get_logo_base64():
     except Exception as e:
         print(f"Error loading logo: {e}")
         return None
+
+
+def get_icon_base64():
+    """Get icon as base64 string for watermark in PDF"""
+    try:
+        # Try to find icon - prioritize backend reports folder
+        icon_paths = [
+            os.path.join(settings.BASE_DIR, 'reports', 'icon.png'),  # Backend reports folder
+            os.path.join(settings.BASE_DIR, '..', 'sass-frontend', 'public', 'icon.png'),  # Frontend public folder
+            os.path.join(settings.BASE_DIR, 'static', 'icon.png'),
+            os.path.join(settings.STATIC_ROOT, 'icon.png') if hasattr(settings, 'STATIC_ROOT') else None,
+        ]
+        
+        for icon_path in icon_paths:
+            if icon_path and os.path.exists(icon_path):
+                with open(icon_path, 'rb') as icon_file:
+                    icon_data = icon_file.read()
+                    icon_base64 = base64.b64encode(icon_data).decode('utf-8')
+                    return f'data:image/png;base64,{icon_base64}'
+        
+        # If icon not found, return None
+        return None
+    except Exception as e:
+        print(f"Error loading icon: {e}")
+        return None

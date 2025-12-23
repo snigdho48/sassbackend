@@ -81,9 +81,10 @@ def generate_trend_graph(param_name, dates, values, recommended_range, param_key
         
         valid_dates, valid_values = zip(*valid_data)
         
-        # Create figure with larger height
-        fig = Figure(figsize=(6, 4.5))
+        # Create figure with larger height and transparent background
+        fig = Figure(figsize=(6, 4.5), facecolor='none')
         ax = fig.add_subplot(111)
+        ax.set_facecolor('none')
         
         # Plot actual values
         ax.plot(valid_dates, valid_values, 'b-', linewidth=2, marker='o', markersize=4, label='Actual')
@@ -180,10 +181,10 @@ def generate_trend_graph(param_name, dates, values, recommended_range, param_key
         ax.grid(True, alpha=0.3)
         ax.legend(fontsize=7, loc='best')
         
-        # Save to buffer
+        # Save to buffer with transparent background
         buf = BytesIO()
         fig.tight_layout()
-        fig.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+        fig.savefig(buf, format='png', dpi=100, bbox_inches='tight', transparent=True, facecolor='none')
         buf.seek(0)
         
         # Convert to base64
