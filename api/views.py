@@ -1248,12 +1248,15 @@ class PlantManagementViewSet(viewsets.ModelViewSet):
             page = paginator.page(1)
         
         serializer = self.get_serializer(page, many=True)
-        return Response({
+        resp = Response({
             'count': paginator.count,
             'next': page.has_next() and request.build_absolute_uri(f"?page={page.next_page_number()}&search={search}&owners={owners}&page_size={page_size}") or None,
             'previous': page.has_previous() and request.build_absolute_uri(f"?page={page.previous_page_number()}&search={search}&owners={owners}&page_size={page_size}") or None,
             'results': serializer.data
         })
+        resp['Cache-Control'] = 'no-store, no-cache, must-revalidate'
+        resp['Pragma'] = 'no-cache'
+        return resp
 
     def update(self, request, *args, **kwargs):
         """Update plant - Super Admin can edit all fields, Admin can only update owners"""
@@ -1327,7 +1330,10 @@ class PlantManagementViewSet(viewsets.ModelViewSet):
             # Ensure the owner field is also set (in case serializer didn't set it)
             if not plant.owner:
                 plant.owner = assigned_admin
-                plant.save()
+                plant.save(update_fields=['owner'])
+            # Return the created plant with owners populated so client has correct data
+            serializer = self.get_serializer(plant)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
         
         return response
 
@@ -1815,7 +1821,7 @@ def water_recommendations_view(request):
 
 
 @api_view(['POST'])
-@permission_classes([permissions.AllowAny])
+@permission_classes([permissions.IsAuthenticated])
 def calculate_water_analysis_view(request):
     """Calculate water analysis indices from input parameters."""
     try:
@@ -1901,7 +1907,7 @@ def calculate_water_analysis_view(request):
     }
 )
 @api_view(['POST'])
-@permission_classes([permissions.AllowAny])
+@permission_classes([permissions.IsAuthenticated])
 def calculate_water_analysis_with_recommendations_view(request):
     """Calculate water analysis indices and return recommendations in a single response."""
     try:

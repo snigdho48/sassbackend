@@ -36,7 +36,8 @@ ALLOWED_HOSTS = ['*',
     "sass.reachableads.com",
     "127.0.0.1",
     "localhost",
-    'http://localhost:13595/'
+    'http://localhost:13595/',
+    'http://localhost:3000/',
     ]
 
 
