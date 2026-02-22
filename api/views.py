@@ -37,7 +37,7 @@ class IsAdminUser(permissions.BasePermission):
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     """Custom JWT token view that includes user information."""
-    
+    permission_classes = [permissions.AllowAny]
     # Override the username field to use email instead
     username_field = 'email'
     
