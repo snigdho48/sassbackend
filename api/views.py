@@ -2323,11 +2323,18 @@ def calculate_water_analysis_with_recommendations_view(request):
             _max = cooling_targets['hardness'].get('max')
             if _max is not None:
                 direct_components.append(1.0 if hardness <= _max else 0.0)
-        # Alkalinity
-        if cooling_targets.get('alkalinity') and total_alkalinity is not None:
-            _max = cooling_targets['alkalinity'].get('max')
-            if _max is not None:
+        # Total Alkalinity (prefer explicit total_alkalinity range; fallback to legacy alkalinity max)
+        # This ensures cooling scoring uses Total Alkalinity Min/Max when configured in Plant Management.
+        alk_target = cooling_targets.get('total_alkalinity') or cooling_targets.get('alkalinity')
+        if alk_target and total_alkalinity is not None:
+            _min = alk_target.get('min')
+            _max = alk_target.get('max')
+            if _min is not None and _max is not None:
+                direct_components.append(1.0 if _min <= total_alkalinity <= _max else 0.0)
+            elif _max is not None:
                 direct_components.append(1.0 if total_alkalinity <= _max else 0.0)
+            elif _min is not None:
+                direct_components.append(1.0 if total_alkalinity >= _min else 0.0)
         # Chloride
         if cooling_targets.get('chloride') and chloride is not None:
             _max = cooling_targets['chloride'].get('max')
