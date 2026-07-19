@@ -1,0 +1,58 @@
+---
+description: WaterSight backend (sassbackend) workflow, changelog, and conventions
+alwaysApply: true
+---
+
+# sassbackend workflow (WaterSight API)
+
+Django 5.2 + Django REST Framework backend for the WaterSight water-analysis
+platform. This rule complements the global auto-workflow-changelog rule.
+
+## Stack
+
+- Django 5.2, DRF, SimpleJWT (auth), drf-yasg (Swagger/Redoc), django-allauth
+- django-cors-headers, django-extensions, django-debug-toolbar
+- Reporting: reportlab, weasyprint, matplotlib, Pillow (PDF/graph generation)
+
+## Apps
+
+- `users` — custom user model, roles, admin assignment, profile pictures
+- `api` — API url routing, serializers, middleware, shared endpoints
+- `data_entry` — plants, water systems, water analysis, trends, recommendations
+- `dashboard` — dashboard aggregation queries
+- `reports` — report generation, PDF output, graph utils
+
+## Changelog (required every coding turn)
+
+Append entries under `[Unreleased]` (newest first) in:
+
+- `sassbackend/.cursor/workflow/CHANGELOG.md`
+
+Entry format:
+
+```markdown
+### Added | Changed | Fixed | Removed — YYYY-MM-DD
+
+**Time:** YYYY-MM-DD HH:MM (UTC+6)
+**Author:** Cursor agent
+**Issue:** #<id> (if known)
+
+**Summary:** One line — what changed and why.
+
+**Files:**
+- `path/to/file` — brief note
+
+**Impact:** API / migration / route / calculation / none
+```
+
+## Backend conventions
+
+- Use conventional commits (feat, fix, chore, docs, refactor, test); reference
+  GitLab issues with `#<id>`.
+- Every model change requires a migration; note migrations in the changelog with
+  **Impact: migration**.
+- Keep endpoints documented in Swagger (drf-yasg) — flag new/changed routes with
+  **Impact: API** and **Impact: route**.
+- Water calculation changes (LSI/RSI, cycles, dosing, alkalinity) must set
+  **Impact: calculation** and describe the formula change.
+- Do not commit secrets; use environment variables (python-dotenv).

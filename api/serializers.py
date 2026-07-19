@@ -1,8 +1,9 @@
 from rest_framework import serializers
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
+from django.utils import timezone
 from users.models import CustomUser
-from data_entry.models import DataCategory, TechnicalData, AnalyticalScore, WaterAnalysis, WaterTrend, WaterRecommendation, Plant, WaterSystem
+from data_entry.models import DataCategory, TechnicalData, AnalyticalScore, WaterAnalysis, WaterTrend, WaterRecommendation, Plant, WaterSystem, current_local_time
 from reports.models import ReportTemplate, GeneratedReport
 from dashboard.models import DashboardWidget, UserPreference
 
@@ -230,11 +231,16 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
 # Water Analysis Serializers
 class WaterAnalysisSerializer(serializers.ModelSerializer):
     analysis_date = serializers.DateField(format="%Y-%m-%d", input_formats=["%Y-%m-%d"], required=False)
+    analysis_time = serializers.TimeField(
+        format="%H:%M:%S",
+        input_formats=["%H:%M", "%H:%M:%S"],
+        required=False,
+    )
     
     class Meta:
         model = WaterAnalysis
         fields = [
-            'id', 'analysis_name', 'analysis_date', 'plant', 'water_system', 'analysis_type', 'ph', 'tds', 'total_alkalinity', 
+            'id', 'analysis_name', 'analysis_date', 'analysis_time', 'plant', 'water_system', 'analysis_type', 'ph', 'tds', 'total_alkalinity', 
             'hardness', 'chloride', 'temperature', 'basin_temperature', 'sulphate', 'cycle', 'iron', 'phosphate',
             'm_alkalinity', 'p_alkalinity', 'oh_alkalinity', 'sulphite', 'sodium_chloride', 'do', 'boiler_phosphate',
             'lsi', 'rsi', 'psi', 'lr', 'stability_score',
@@ -246,10 +252,11 @@ class WaterAnalysisSerializer(serializers.ModelSerializer):
         ]
     
     def create(self, validated_data):
-        # Set default analysis_date if not provided
+        # Use the configured server timezone for API clients that omit either value.
         if 'analysis_date' not in validated_data:
-            from django.utils import timezone
-            validated_data['analysis_date'] = timezone.now().date()
+            validated_data['analysis_date'] = timezone.localdate()
+        if 'analysis_time' not in validated_data:
+            validated_data['analysis_time'] = current_local_time()
         return super().create(validated_data)
 
 

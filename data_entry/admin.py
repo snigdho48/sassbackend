@@ -39,16 +39,16 @@ class DataCalculationAdmin(admin.ModelAdmin):
 
 @admin.register(WaterAnalysis)
 class WaterAnalysisAdmin(admin.ModelAdmin):
-    list_display = ('user', 'analysis_name', 'analysis_type', 'analysis_date', 'ph', 'lsi', 'rsi', 'psi', 'lr', 'stability_score', 'overall_status')
+    list_display = ('user', 'analysis_name', 'analysis_type', 'analysis_date', 'analysis_time', 'ph', 'lsi', 'rsi', 'psi', 'lr', 'stability_score', 'overall_status')
     list_filter = ('analysis_type', 'overall_status', 'analysis_date', 'user', 'lsi_status', 'rsi_status', 'psi_status', 'lr_status')
     search_fields = ('user__email', 'analysis_name', 'notes')
     date_hierarchy = 'analysis_date'
-    ordering = ('-analysis_date', '-created_at')
+    ordering = ('-analysis_date', '-analysis_time', '-created_at')
     readonly_fields = ('lsi', 'rsi', 'psi', 'lr', 'stability_score', 'lsi_status', 'rsi_status', 'psi_status', 'lr_status', 'overall_status')
     
     fieldsets = (
         (None, {
-            'fields': ('user', 'analysis_name', 'analysis_type', 'analysis_date', 'notes')
+            'fields': ('user', 'analysis_name', 'analysis_type', 'analysis_date', 'analysis_time', 'notes')
         }),
         ('Water Parameters - Common', {
             'fields': ('ph', 'tds', 'hardness')

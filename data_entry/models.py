@@ -7,6 +7,11 @@ import math
 User = get_user_model()
 
 
+def current_local_time():
+    """Return the configured server timezone's current wall-clock time."""
+    return timezone.localtime().time().replace(tzinfo=None)
+
+
 class DataCategory(models.Model):
     """Categories for different types of technical data."""
     name = models.CharField(max_length=100, unique=True)
@@ -350,6 +355,7 @@ class WaterAnalysis(models.Model):
     plant = models.ForeignKey(Plant, on_delete=models.CASCADE, related_name='water_analyses', null=True, blank=True)
     water_system = models.ForeignKey('WaterSystem', on_delete=models.CASCADE, related_name='water_analyses', null=True, blank=True, help_text='The specific water system (cooling/boiler) for this analysis')
     analysis_date = models.DateField(default=timezone.now)
+    analysis_time = models.TimeField(default=current_local_time)
     analysis_name = models.CharField(max_length=100, default="Water Analysis")
     analysis_type = models.CharField(max_length=20, choices=[('cooling', 'Cooling Water'), ('boiler', 'Boiler Water')], default='cooling')
     
@@ -396,11 +402,11 @@ class WaterAnalysis(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        ordering = ['-analysis_date', '-created_at']
+        ordering = ['-analysis_date', '-analysis_time', '-created_at']
         verbose_name_plural = "Water Analyses"
     
     def __str__(self):
-        return f"{self.user.email} - {self.analysis_name} ({self.analysis_date})"
+        return f"{self.user.email} - {self.analysis_name} ({self.analysis_date} {self.analysis_time})"
     
     def save(self, *args, **kwargs):
         """Override save to create WaterTrend records for historical tracking."""
