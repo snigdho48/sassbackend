@@ -236,20 +236,32 @@ class WaterAnalysisSerializer(serializers.ModelSerializer):
         input_formats=["%H:%M", "%H:%M:%S"],
         required=False,
     )
+    plant_name = serializers.SerializerMethodField()
+    water_system_name = serializers.SerializerMethodField()
     
     class Meta:
         model = WaterAnalysis
         fields = [
-            'id', 'analysis_name', 'analysis_date', 'analysis_time', 'plant', 'water_system', 'analysis_type', 'ph', 'tds', 'total_alkalinity', 
+            'id', 'analysis_name', 'analysis_date', 'analysis_time', 'plant', 'plant_name',
+            'water_system', 'water_system_name', 'analysis_type', 'ph', 'tds', 'total_alkalinity',
             'hardness', 'chloride', 'temperature', 'basin_temperature', 'sulphate', 'cycle', 'iron', 'phosphate',
             'm_alkalinity', 'p_alkalinity', 'oh_alkalinity', 'sulphite', 'sodium_chloride', 'do', 'boiler_phosphate',
             'lsi', 'rsi', 'psi', 'lr', 'stability_score',
-            'lsi_status', 'rsi_status', 'psi_status', 'lr_status', 'overall_status', 
+            'lsi_status', 'rsi_status', 'psi_status', 'lr_status', 'overall_status',
             'notes', 'created_at', 'updated_at'
         ]
         read_only_fields = [
-            'id', 'stability_score', 'created_at', 'updated_at'
+            'id', 'plant_name', 'water_system_name',
+            'lsi', 'rsi', 'psi', 'lr', 'stability_score',
+            'lsi_status', 'rsi_status', 'psi_status', 'lr_status', 'overall_status',
+            'created_at', 'updated_at'
         ]
+
+    def get_plant_name(self, obj):
+        return obj.plant.name if obj.plant_id and obj.plant else None
+
+    def get_water_system_name(self, obj):
+        return obj.water_system.name if obj.water_system_id and obj.water_system else None
     
     def create(self, validated_data):
         # Use the configured server timezone for API clients that omit either value.

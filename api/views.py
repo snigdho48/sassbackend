@@ -7,8 +7,9 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 from django.contrib.auth import authenticate
 from django.db.models import Count, Avg, Q
+from django.db.models.functions import TruncMonth, TruncYear
 from django.utils import timezone
-from datetime import timedelta
+from datetime import datetime, timedelta
 import json
 import math
 from django.core.paginator import Paginator, EmptyPage, InvalidPage
@@ -600,7 +601,9 @@ class ReportGenerationView(APIView):
             # PDF generators use .first() and .exists(), so we need to handle that
             from data_entry.models import WaterAnalysis
             analysis_ids = [a.id for a in analyses_list]
-            analyses = WaterAnalysis.objects.filter(id__in=analysis_ids).order_by('analysis_date')
+            analyses = WaterAnalysis.objects.filter(id__in=analysis_ids).order_by(
+                'analysis_date', 'analysis_time', 'id'
+            )
             
             # Import PDF generator from utils
             from reports.utils.report_generators import (
@@ -706,7 +709,9 @@ class ReportDownloadView(APIView):
             
             # Convert list to queryset for PDF generators
             analysis_ids = [a.id for a in analyses_list]
-            analyses = WaterAnalysis.objects.filter(id__in=analysis_ids).order_by('analysis_date')
+            analyses = WaterAnalysis.objects.filter(id__in=analysis_ids).order_by(
+                'analysis_date', 'analysis_time', 'id'
+            )
             
             # Import PDF generator from utils
             from reports.utils.report_generators import (
@@ -1468,43 +1473,47 @@ class WaterAnalysisViewSet(viewsets.ModelViewSet):
     """ViewSet for water analysis."""
     serializer_class = WaterAnalysisSerializer
     permission_classes = [permissions.IsAuthenticated]
-    
+    # Immutable on update: plant/system/type/ownership stay fixed from create time.
+    UPDATE_IMMUTABLE_FIELDS = {
+        'plant', 'water_system', 'analysis_type', 'user',
+        'lsi', 'rsi', 'psi', 'lr', 'stability_score',
+        'lsi_status', 'rsi_status', 'psi_status', 'lr_status', 'overall_status',
+    }
+
     def get_queryset(self):
         user = self.request.user
-        queryset = WaterAnalysis.objects.filter(user=user)
-        
-        # General Users can only see analyses for water systems they are assigned to
-        if user.is_general_user:
-            queryset = queryset.filter(
-                water_system__assigned_users=user
-            ).distinct()
-        elif user.is_admin and not user.can_create_plants:
-            # Regular admins can see analyses for water systems they are assigned to or plants they own
-            queryset = queryset.filter(
-                Q(water_system__assigned_users=user) | 
-                Q(water_system__plant__owners=user) | 
-                Q(water_system__plant__owner=user)
-            ).distinct()
-        
-        return queryset
-    
+
+        # Super Admins see all analyses across users (daily report management).
+        if user.can_create_plants:
+            queryset = WaterAnalysis.objects.all()
+        else:
+            queryset = WaterAnalysis.objects.filter(user=user)
+            if user.is_general_user:
+                queryset = queryset.filter(
+                    water_system__assigned_users=user
+                ).distinct()
+            elif user.is_admin and not user.can_create_plants:
+                queryset = queryset.filter(
+                    Q(water_system__assigned_users=user) |
+                    Q(water_system__plant__owners=user) |
+                    Q(water_system__plant__owner=user)
+                ).distinct()
+
+        return queryset.order_by('-analysis_date', '-analysis_time', '-created_at')
+
     def perform_create(self, serializer):
         user = self.request.user
         water_system = serializer.validated_data.get('water_system')
-        
-        # Validate water_system is provided
+
         if not water_system:
             raise ValidationError({'water_system': 'Water system is required'})
-        
-        # Check user access to water system
+
         if user.is_general_user:
-            # General users must be assigned to the water system
             if user not in water_system.assigned_users.all():
                 raise ValidationError(
                     {'water_system': 'You do not have access to this water system. Please contact an administrator.'}
                 )
         elif user.is_admin and not user.can_create_plants:
-            # Regular admins must be assigned to the water system or own the plant
             plant = water_system.plant
             has_water_system_access = user in water_system.assigned_users.all()
             has_plant_access = user in plant.owners.all() or plant.owner == user
@@ -1512,17 +1521,46 @@ class WaterAnalysisViewSet(viewsets.ModelViewSet):
                 raise ValidationError(
                     {'water_system': 'You do not have access to this water system. Please contact a super administrator.'}
                 )
-        
+
         water_analysis = serializer.save(user=user)
         water_analysis.calculate_indices()
         try:
             water_analysis._generate_recommendations()
         except Exception as e:
             print(f"Error generating recommendations: {e}")
-            # Don't fail the save if recommendations generation fails
-    
+
+    def update(self, request, *args, **kwargs):
+        """Block immutable metadata/computed fields on edit."""
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        data = request.data.copy() if hasattr(request.data, 'copy') else dict(request.data)
+        for field in self.UPDATE_IMMUTABLE_FIELDS:
+            data.pop(field, None)
+        serializer = self.get_serializer(instance, data=data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
+
+    def partial_update(self, request, *args, **kwargs):
+        kwargs['partial'] = True
+        return self.update(request, *args, **kwargs)
+
+    def perform_update(self, serializer):
+        water_analysis = serializer.save()
+        water_analysis.calculate_indices()
+        try:
+            water_analysis._generate_recommendations()
+        except Exception as e:
+            print(f"Error regenerating recommendations: {e}")
+        # Refresh trend rows so charts stay in sync with edited values/date.
+        try:
+            WaterTrend.objects.filter(analysis_id=water_analysis.id).delete()
+            water_analysis._create_trend_records()
+        except Exception as e:
+            print(f"Error refreshing trend records: {e}")
+
     @swagger_auto_schema(
-        operation_description="List water analyses for the current user",
+        operation_description="List water analyses for the current user (Super Admin: all analyses)",
         responses={
             200: openapi.Response('Water analyses', openapi.Schema(
                 type=openapi.TYPE_ARRAY,
@@ -1533,7 +1571,7 @@ class WaterAnalysisViewSet(viewsets.ModelViewSet):
     )
     def list(self, request, *args, **kwargs):
         return super().list(request, *args, **kwargs)
-    
+
     @swagger_auto_schema(
         operation_description="Create a new water analysis",
         request_body=openapi.Schema(
@@ -1561,6 +1599,304 @@ class WaterAnalysisViewSet(viewsets.ModelViewSet):
     )
     def create(self, request, *args, **kwargs):
         return super().create(request, *args, **kwargs)
+
+    def _accessible_analysis_queryset(self, user, analysis_type, water_system_id):
+        """Analyses visible for report discovery/generation for this user + system."""
+        queryset = WaterAnalysis.objects.filter(
+            analysis_type=analysis_type,
+            water_system_id=water_system_id,
+        )
+        # Match PDF generation: staff/Super Admin see all rows for the system;
+        # everyone else only sees their own submissions.
+        if not (user.can_create_plants or user.is_staff):
+            queryset = queryset.filter(user=user)
+        return queryset
+
+    def _ensure_report_list_access(self, request, water_system_id):
+        """Validate water-system access for report availability endpoints."""
+        from reports.utils.report_queries import check_water_system_access_raw
+
+        if not WaterSystem.objects.filter(id=water_system_id).exists():
+            return Response(
+                {'error': 'Water system not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        if not check_water_system_access_raw(request.user, water_system_id):
+            return Response(
+                {'error': 'You do not have access to this water system'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        return None
+
+    @swagger_auto_schema(
+        operation_description="Paginated distinct analysis dates with ordered time entries",
+        manual_parameters=[
+            openapi.Parameter('analysis_type', openapi.IN_QUERY, type=openapi.TYPE_STRING, required=True),
+            openapi.Parameter('water_system', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, required=True),
+            openapi.Parameter('page', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, required=False),
+            openapi.Parameter('page_size', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, required=False),
+        ],
+        responses={
+            200: openapi.Response(description="Grouped daily analysis dates"),
+            400: openapi.Response(description="Missing/invalid filters"),
+            403: openapi.Response(description="Water system access required"),
+        }
+    )
+    @action(detail=False, methods=['get'], url_path='daily-groups')
+    def daily_groups(self, request):
+        """Paginate distinct analysis dates available for daily reports."""
+        analysis_type = request.query_params.get('analysis_type')
+        water_system_id = request.query_params.get('water_system')
+        if not analysis_type or analysis_type not in ('cooling', 'boiler'):
+            return Response(
+                {'error': 'analysis_type must be cooling or boiler'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if not water_system_id:
+            return Response(
+                {'error': 'water_system is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        try:
+            water_system_id = int(water_system_id)
+        except (TypeError, ValueError):
+            return Response(
+                {'error': 'water_system must be an integer'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        access_error = self._ensure_report_list_access(request, water_system_id)
+        if access_error is not None:
+            return access_error
+
+        try:
+            page = max(int(request.query_params.get('page', 1)), 1)
+        except (TypeError, ValueError):
+            page = 1
+        try:
+            page_size = int(request.query_params.get('page_size', 10))
+        except (TypeError, ValueError):
+            page_size = 10
+        if page_size not in (10, 25, 50):
+            page_size = 10
+
+        base_qs = self._accessible_analysis_queryset(
+            request.user, analysis_type, water_system_id
+        )
+        distinct_dates = (
+            base_qs.values_list('analysis_date', flat=True)
+            .distinct()
+            .order_by('-analysis_date')
+        )
+        paginator = Paginator(distinct_dates, page_size)
+        try:
+            page_obj = paginator.page(page)
+        except (EmptyPage, InvalidPage):
+            page_obj = paginator.page(paginator.num_pages if paginator.num_pages else 1)
+
+        results = []
+        for analysis_date in page_obj.object_list:
+            entries = list(
+                base_qs.filter(analysis_date=analysis_date)
+                .order_by('analysis_time', 'id')
+                .values(
+                    'id',
+                    'analysis_time',
+                    'overall_status',
+                    'stability_score',
+                    'analysis_name',
+                )
+            )
+            for entry in entries:
+                time_value = entry.get('analysis_time')
+                entry['analysis_time'] = (
+                    time_value.strftime('%H:%M:%S') if time_value else None
+                )
+                score = entry.get('stability_score')
+                entry['stability_score'] = float(score) if score is not None else None
+            results.append({
+                'date': analysis_date.strftime('%Y-%m-%d'),
+                'record_count': len(entries),
+                'entries': entries,
+            })
+
+        return Response({
+            'count': paginator.count,
+            'total_pages': paginator.num_pages,
+            'page': page_obj.number,
+            'page_size': page_size,
+            'results': results,
+        })
+
+    @swagger_auto_schema(
+        operation_description="Paginated months or years that contain report data",
+        manual_parameters=[
+            openapi.Parameter('analysis_type', openapi.IN_QUERY, type=openapi.TYPE_STRING, required=True),
+            openapi.Parameter('water_system', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, required=True),
+            openapi.Parameter('period_type', openapi.IN_QUERY, type=openapi.TYPE_STRING, required=True),
+            openapi.Parameter('page', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, required=False),
+            openapi.Parameter('page_size', openapi.IN_QUERY, type=openapi.TYPE_INTEGER, required=False),
+        ],
+        responses={
+            200: openapi.Response(description="Grouped report periods"),
+            400: openapi.Response(description="Missing/invalid filters"),
+            403: openapi.Response(description="Water system access required"),
+        }
+    )
+    @action(detail=False, methods=['get'], url_path='report-periods')
+    def report_periods(self, request):
+        """Paginate months or years that have analyses for report generation."""
+        analysis_type = request.query_params.get('analysis_type')
+        water_system_id = request.query_params.get('water_system')
+        period_type = request.query_params.get('period_type')
+
+        if analysis_type not in ('cooling', 'boiler'):
+            return Response(
+                {'error': 'analysis_type must be cooling or boiler'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if period_type not in ('monthly', 'yearly'):
+            return Response(
+                {'error': 'period_type must be monthly or yearly'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        try:
+            water_system_id = int(water_system_id)
+        except (TypeError, ValueError):
+            return Response(
+                {'error': 'water_system must be an integer'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        access_error = self._ensure_report_list_access(request, water_system_id)
+        if access_error is not None:
+            return access_error
+
+        try:
+            page = max(int(request.query_params.get('page', 1)), 1)
+        except (TypeError, ValueError):
+            page = 1
+        try:
+            page_size = int(request.query_params.get('page_size', 10))
+        except (TypeError, ValueError):
+            page_size = 10
+        if page_size not in (10, 25, 50):
+            page_size = 10
+
+        trunc_function = TruncMonth if period_type == 'monthly' else TruncYear
+        grouped_periods = (
+            self._accessible_analysis_queryset(
+                request.user, analysis_type, water_system_id
+            )
+            .annotate(period=trunc_function('analysis_date'))
+            .values('period')
+            .annotate(
+                record_count=Count('id'),
+                day_count=Count('analysis_date', distinct=True),
+            )
+            .order_by('-period')
+        )
+
+        paginator = Paginator(grouped_periods, page_size)
+        try:
+            page_obj = paginator.page(page)
+        except (EmptyPage, InvalidPage):
+            page_obj = paginator.page(paginator.num_pages if paginator.num_pages else 1)
+
+        results = []
+        for group in page_obj.object_list:
+            period_date = group['period']
+            results.append({
+                'period': (
+                    period_date.strftime('%Y-%m')
+                    if period_type == 'monthly'
+                    else period_date.strftime('%Y')
+                ),
+                'record_count': group['record_count'],
+                'day_count': group['day_count'],
+            })
+
+        return Response({
+            'count': paginator.count,
+            'total_pages': paginator.num_pages,
+            'page': page_obj.number,
+            'page_size': page_size,
+            'period_type': period_type,
+            'results': results,
+        })
+
+    @swagger_auto_schema(
+        operation_description="Super Admin: delete all analyses for a date/type/system",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['analysis_type', 'water_system', 'date'],
+            properties={
+                'analysis_type': openapi.Schema(type=openapi.TYPE_STRING),
+                'water_system': openapi.Schema(type=openapi.TYPE_INTEGER),
+                'date': openapi.Schema(type=openapi.TYPE_STRING, description='YYYY-MM-DD'),
+            }
+        ),
+        responses={
+            200: openapi.Response(description="Day deleted"),
+            400: openapi.Response(description="Invalid payload"),
+            403: openapi.Response(description="Super Admin access required"),
+            404: openapi.Response(description="No analyses found"),
+        }
+    )
+    @action(detail=False, methods=['delete'], url_path='delete-day')
+    def delete_day(self, request):
+        """Delete every analysis for one calendar day (Super Admin only)."""
+        if not request.user.can_create_plants:
+            return Response(
+                {'error': 'Super Admin access required'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        analysis_type = request.data.get('analysis_type')
+        water_system_id = request.data.get('water_system')
+        date_str = request.data.get('date')
+
+        if analysis_type not in ('cooling', 'boiler'):
+            return Response(
+                {'error': 'analysis_type must be cooling or boiler'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if not water_system_id or not date_str:
+            return Response(
+                {'error': 'water_system and date are required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            water_system_id = int(water_system_id)
+            analysis_date = datetime.strptime(str(date_str), '%Y-%m-%d').date()
+        except (TypeError, ValueError):
+            return Response(
+                {'error': 'Invalid water_system or date format (expected YYYY-MM-DD)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        qs = WaterAnalysis.objects.filter(
+            analysis_type=analysis_type,
+            water_system_id=water_system_id,
+            analysis_date=analysis_date,
+        )
+        deleted_count = qs.count()
+        if deleted_count == 0:
+            return Response(
+                {'error': 'No analyses found for the selected day'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        analysis_ids = list(qs.values_list('id', flat=True))
+        WaterTrend.objects.filter(analysis_id__in=analysis_ids).delete()
+        qs.delete()
+
+        return Response({
+            'success': True,
+            'deleted_count': deleted_count,
+            'date': date_str,
+        })
 
 
 @api_view(['GET'])

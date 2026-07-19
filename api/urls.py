@@ -55,7 +55,10 @@ urlpatterns = [
     
     # Water Analysis endpoints
     path('water-analysis/', views.WaterAnalysisViewSet.as_view({'get': 'list', 'post': 'create'}), name='water_analysis'),
-    path('water-analysis/<int:pk>/', views.WaterAnalysisViewSet.as_view({'get': 'retrieve', 'put': 'update', 'delete': 'destroy'}), name='water_analysis_detail'),
+    path('water-analysis/daily-groups/', views.WaterAnalysisViewSet.as_view({'get': 'daily_groups'}), name='water_analysis_daily_groups'),
+    path('water-analysis/report-periods/', views.WaterAnalysisViewSet.as_view({'get': 'report_periods'}), name='water_analysis_report_periods'),
+    path('water-analysis/delete-day/', views.WaterAnalysisViewSet.as_view({'delete': 'delete_day'}), name='water_analysis_delete_day'),
+    path('water-analysis/<int:pk>/', views.WaterAnalysisViewSet.as_view({'get': 'retrieve', 'put': 'update', 'patch': 'partial_update', 'delete': 'destroy'}), name='water_analysis_detail'),
     path('water-trends/', views.water_trends_view, name='water_trends'),
     path('water-recommendations/', views.water_recommendations_view, name='water_recommendations'),
     path('calculate-water-analysis/', views.calculate_water_analysis_view, name='calculate_water_analysis'),

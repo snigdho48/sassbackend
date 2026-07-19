@@ -3,7 +3,33 @@ Report Generators for Water Analysis Reports
 Generates Daily, Monthly, and Yearly PDF reports using HTML/CSS
 """
 from io import BytesIO
-from datetime import datetime
+from datetime import datetime, timedelta
+import os
+
+# Ensure Windows can find WeasyPrint/GTK DLLs before importing weasyprint.
+if os.name == 'nt':
+    dll_dir = os.environ.get('WEASYPRINT_DLL_DIRECTORIES')
+    candidate_paths = [
+        dll_dir,
+        r'C:\msys64\mingw64\bin',
+        r'C:\msys32\mingw64\bin',
+        r'C:\Program Files\PostgreSQL\18\bin\postgisgui',
+        r'C:\Program Files\PostgreSQL\17\bin\postgisgui',
+        r'C:\Program Files\PostgreSQL\16\bin\postgisgui',
+    ]
+    for path in candidate_paths:
+        if not path:
+            continue
+        if os.path.exists(path) and os.path.exists(
+            os.path.join(path, 'libgobject-2.0-0.dll')
+        ):
+            os.environ['WEASYPRINT_DLL_DIRECTORIES'] = path
+            try:
+                os.add_dll_directory(path)
+            except (OSError, AttributeError):
+                pass
+            break
+
 import weasyprint
 from weasyprint import HTML
 
@@ -22,89 +48,108 @@ from reports.utils.action_utils import get_suggested_action_with_status
 
 
 def generate_daily_report_pdf(analyses, water_system, analysis_type, report_date):
-    """Generate daily report PDF using HTML/CSS"""
+    """Generate daily report PDF with time-wise columns (like monthly date columns)."""
     buffer = BytesIO()
-    
-    # Get the analysis (should be one for daily)
-    analysis = analyses.first() if analyses.exists() else None
-    
-    if not analysis:
-        # Return empty PDF
+
+    if not analyses.exists():
         return buffer
-    
-    # Get plant and water system names
+
+    # All same-day analyses, chronological by Dhaka wall-clock time
+    day_analyses = list(analyses.order_by('analysis_time', 'id'))
+    if not day_analyses:
+        return buffer
+
+    # Latest sample drives parameter availability + recommendations
+    analysis = day_analyses[-1]
+
     plant_name = water_system.plant.name if water_system and water_system.plant else 'N/A'
     water_system_name = water_system.name if water_system else 'N/A'
     project_name = f'{plant_name} - {water_system_name}'
-    
-    # Get logo
+
     logo_base64 = get_logo_base64()
-    
-    # Get icon for watermark
     icon_base64 = get_icon_base64()
-    
-    # Get parameter info - pass analysis so temperature can be included if it has values
     param_info = get_parameter_info(analysis_type, water_system, analysis)
     primary_color = '#1e40af' if analysis_type == 'cooling' else '#7c3aed'
-    
-    # Build water analysis table data
+
+    time_headers = []
+    for item in day_analyses:
+        if item.analysis_time:
+            # e.g. "6:09 AM" (matches the frontend display format)
+            time_headers.append(item.analysis_time.strftime('%I:%M %p').lstrip('0'))
+        else:
+            time_headers.append('--:--')
+
+    # Build parameter rows with one value column per time + average
     analysis_rows = []
     for param_tuple in param_info['parameters']:
-        # Handle both 3-tuple (legacy) and 4-tuple (new) formats
         if len(param_tuple) == 4:
             param_name, method, recommended, param_key = param_tuple
         else:
             param_name, method, recommended = param_tuple
             param_key = param_name.lower().replace('-', '_').replace(' ', '_')
-        
-        # Skip Appearance
+
         if param_name == 'Appearance':
             continue
-        
-        # Use param_key if available, otherwise fallback to param_name
-        value = get_analysis_value(analysis, param_key) if param_key else None
-        
-        # Skip parameters with no value (except for calculated indices like LSI/RSI which might be None)
-        # For calculated indices, show them even if None (they'll show as '-')
-        # For measured parameters, skip if no value
-        if value is None and param_key and param_key not in ['lsi', 'rsi', 'psi', 'lr']:
+
+        values = []
+        numeric_values = []
+        has_any_value = False
+        for item in day_analyses:
+            value = get_analysis_value(item, param_key) if param_key else None
+            if value is None:
+                values.append('-')
+                continue
+            has_any_value = True
+            try:
+                numeric = float(value)
+            except (TypeError, ValueError):
+                values.append(str(value))
+                continue
+            numeric_values.append(numeric)
+            values.append(f'{numeric:.2f}')
+
+        calculated_indices = ['lsi', 'rsi', 'psi', 'lr']
+        is_calculated_index = param_key and param_key.lower() in calculated_indices
+        if not has_any_value and not is_calculated_index:
             continue
-        
-        value_str = f'{value:.2f}' if value is not None and isinstance(value, (int, float)) else str(value) if value else '-'
+
+        average = (
+            f'{sum(numeric_values) / len(numeric_values):.2f}'
+            if numeric_values else '-'
+        )
         analysis_rows.append({
             'parameter': param_name,
             'method': method,
-            'value': value_str,
-            'recommended': recommended
+            'values': values,
+            'average': average,
+            'recommended': recommended,
         })
-    
-    # Get recommendations from the analysis (like water analysis page)
+
     from data_entry.models import WaterRecommendation
-    recommendations = WaterRecommendation.objects.filter(analysis=analysis).order_by('-priority', '-created_at')
-    
-    # If no recommendations exist, fallback to parameter-based suggestions
+    recommendations = WaterRecommendation.objects.filter(
+        analysis=analysis
+    ).order_by('-priority', '-created_at')
+
     if not recommendations.exists():
-        # Build suggested action table data as fallback
         action_rows = []
         for param_tuple in param_info['parameters']:
-            # Handle both 3-tuple (legacy) and 4-tuple (new) formats
             if len(param_tuple) == 4:
                 param_name, method, recommended, param_key = param_tuple
             else:
                 param_name, method, recommended = param_tuple
                 param_key = param_name.lower().replace('-', '_').replace(' ', '_')
-            
+
             if param_name in ['Appearance']:
                 continue
-            
-            # Use param_key if available, otherwise fallback to param_name
+
             value = get_analysis_value(analysis, param_key) if param_key else None
             if value is None:
                 continue
-            
-            suggested_action_text, is_within_range = get_suggested_action_with_status(param_name, value, recommended, analysis_type)
+
+            suggested_action_text, is_within_range = get_suggested_action_with_status(
+                param_name, value, recommended, analysis_type
+            )
             icon = '✓' if is_within_range else '■'
-            
             action_rows.append({
                 'parameter': param_name,
                 'target_range': recommended,
@@ -115,6 +160,7 @@ def generate_daily_report_pdf(analyses, water_system, analysis_type, report_date
             })
         use_table_format = True
     else:
+        action_rows = []
         use_table_format = False
     
     # Generate HTML
@@ -229,17 +275,42 @@ def generate_daily_report_pdf(analyses, water_system, analysis_type, report_date
                 border-left: 1px solid rgba(255, 255, 255, 0.3);
                 border-right: 1px solid rgba(255, 255, 255, 0.3);
             }}
-            table.analysis-table th:nth-child(1) {{
-                width: 20%;
+            table.analysis-table th {{
+                text-align: center;
+                font-size: 7.5pt;
+                padding: 8px 4px;
+                letter-spacing: 0.3px;
+                height: auto;
+                min-height: 0;
+                max-height: none;
+                overflow: visible;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
+            }}
+            table.analysis-table th:first-child,
+            table.analysis-table th:nth-child(2),
+            table.analysis-table th:last-child {{
+                text-align: left;
+            }}
+            /* Wide text columns; the time/Avg columns share the rest evenly */
+            table.analysis-table th:first-child {{
+                width: 16%;
             }}
             table.analysis-table th:nth-child(2) {{
-                width: 25%;
-            }}
-            table.analysis-table th:nth-child(3) {{
                 width: 15%;
             }}
-            table.analysis-table th:nth-child(4) {{
-                width: 40%;
+            table.analysis-table th:last-child {{
+                width: 20%;
+            }}
+            table.analysis-table td {{
+                text-align: center;
+                font-size: 8pt;
+                padding: 8px 4px;
+            }}
+            table.analysis-table td:first-child,
+            table.analysis-table td:nth-child(2),
+            table.analysis-table td:last-child {{
+                text-align: left;
             }}
             table td {{
                 padding: 12px;
@@ -470,24 +541,27 @@ def generate_daily_report_pdf(analyses, water_system, analysis_type, report_date
                 <thead>
                     <tr>
                         <th>Parameters</th>
-                        <th>Method of Analysis</th>
-                        <th>{water_system.name}</th>
-                        <th>Recommended Water Range {analysis_type.capitalize()}</th>
+                        <th>Method</th>
+                        {''.join(f'<th>{header}</th>' for header in time_headers)}
+                        <th>Avg</th>
+                        <th>Recommended Range</th>
                     </tr>
                 </thead>
                 <tbody>
     """
-    
+
     for row in analysis_rows:
+        value_cells = ''.join(f'<td>{value}</td>' for value in row['values'])
         html_content += f"""
                     <tr>
                         <td>{row['parameter']}</td>
                         <td>{row['method']}</td>
-                        <td>{row['value']}</td>
+                        {value_cells}
+                        <td>{row['average']}</td>
                         <td>{row['recommended']}</td>
                     </tr>
         """
-    
+
     html_content += """
                 </tbody>
             </table>
@@ -496,7 +570,7 @@ def generate_daily_report_pdf(analyses, water_system, analysis_type, report_date
         <div class="table-container">
             <div class="recommendations-title">Suggested Action</div>
     """
-    
+
     if use_table_format:
         # Fallback to table format if no recommendations exist
         html_content += """
@@ -734,12 +808,12 @@ def generate_monthly_report_pdf(analyses, water_system, analysis_type, month_str
                 })
     
     # Generate HTML
-    # Format date headers as day only (e.g., "21" instead of "21-12-2025")
+    # Format date headers as month + day on two lines (e.g., "May" / "03")
     date_headers = []
     for date_key in sorted_dates_str:
         try:
             dt = datetime.strptime(date_key, '%Y-%m-%d')
-            date_headers.append(dt.strftime('%d'))  # Format: "21" (day only)
+            date_headers.append(f"{dt.strftime('%b')}<br/>{dt.strftime('%d')}")
         except:
             date_headers.append(date_key)
     
@@ -1133,8 +1207,11 @@ def generate_yearly_report_pdf(analyses, water_system, analysis_type, year):
     table_rows = []
     graph_data = []
     
-    # Get sorted month keys
-    sorted_month_keys = sorted(analyses_by_month.keys())
+    # Get month keys in chronological (not alphabetical) order
+    sorted_month_keys = sorted(
+        analyses_by_month.keys(),
+        key=lambda key: datetime.strptime(key, '%b %Y'),
+    )
     
     for param_tuple in param_info['parameters']:
         # Handle both 3-tuple (legacy) and 4-tuple (new) formats
@@ -1161,7 +1238,9 @@ def generate_yearly_report_pdf(analyses, water_system, analysis_type, year):
             month_analyses = analyses_by_month[month_key]
             # Get average value for the month - use param_key if available
             values = [get_analysis_value(a, param_key) if param_key else None for a in month_analyses]
-            values = [v for v in values if v is not None]
+            # Cast to float: DB values are Decimal, and downstream graph/trend
+            # math multiplies by floats (Decimal * float raises TypeError).
+            values = [float(v) for v in values if v is not None]
             if values:
                 avg_value = sum(values) / len(values)
                 value_str = f'{avg_value:.2f}'
@@ -1473,7 +1552,8 @@ def generate_yearly_report_pdf(analyses, water_system, analysis_type, year):
     """
     
     for month_header in sorted_month_keys:
-        html_content += f"<th>{month_header}</th>"
+        # "May 2026" -> "May" / "2026" on two lines to keep columns narrow
+        html_content += f"<th>{month_header.replace(' ', '<br/>')}</th>"
     
     html_content += f"<th>Recommended Water Range {analysis_type.capitalize()}</th>"
     html_content += """

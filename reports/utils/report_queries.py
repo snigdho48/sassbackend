@@ -25,6 +25,7 @@ def get_report_analyses_raw(user, water_system_id, analysis_type, start_date, en
                 wa.water_system_id,
                 wa.analysis_name,
                 wa.analysis_date,
+                wa.analysis_time,
                 wa.analysis_type,
                 wa.ph,
                 wa.tds,
@@ -71,8 +72,8 @@ def get_report_analyses_raw(user, water_system_id, analysis_type, start_date, en
             base_query += " AND wa.user_id = %s"
             params.append(user.id)
         
-        # Add ordering
-        base_query += " ORDER BY wa.analysis_date ASC"
+        # Add ordering (date then time so multi-sample days stay chronological)
+        base_query += " ORDER BY wa.analysis_date ASC, wa.analysis_time ASC, wa.id ASC"
         
         cursor.execute(base_query, params)
         

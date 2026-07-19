@@ -56,4 +56,16 @@ python manage.py runserver
 - `calculation` — water chemistry logic changed (LSI/RSI, cycles, dosing, etc.)
 - `none` — docs/tooling only
 
+## Daily report management (Super Admin)
+
+- `GET /api/water-analysis/daily-groups/?analysis_type=&water_system=&page=&page_size=`
+  — paginates distinct analysis dates with ordered time entries (any user with
+  water-system access; non–Super Admin results are scoped to their own data)
+- `GET /api/water-analysis/report-periods/?analysis_type=&water_system=&period_type=&page=&page_size=`
+  — paginates months or years that contain reportable data, with distinct-day
+  and record counts (`period_type=monthly|yearly`; same access/scoping rules)
+- `DELETE /api/water-analysis/delete-day/` — deletes all analyses for one date/type/system
+- `PATCH /api/water-analysis/<id>/` — edit measurements/date-time; recalculates indices
+- Daily PDF generation includes every same-day sample as a time column (+ average)
+
 See `.cursor/rules/sassbackend-workflow.mdc` for the full rule.

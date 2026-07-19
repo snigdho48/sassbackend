@@ -20,6 +20,9 @@ if os.name == 'nt':  # Windows
         possible_paths = [
             r'C:\msys64\mingw64\bin',
             r'C:\msys32\mingw64\bin',
+            r'C:\Program Files\PostgreSQL\18\bin\postgisgui',
+            r'C:\Program Files\PostgreSQL\17\bin\postgisgui',
+            r'C:\Program Files\PostgreSQL\16\bin\postgisgui',
         ]
         for path in possible_paths:
             if os.path.exists(path) and os.path.exists(os.path.join(path, 'libgobject-2.0-0.dll')):
